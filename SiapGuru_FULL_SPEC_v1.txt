@@ -1,0 +1,1538 @@
+SIAPGURU DESKTOP v1 — FULL DEVELOPMENT SPEC
+Python Windows EXE | Offline Teacher Productivity App
+Versi Dokumen: 1.0
+Format: TXT
+
+============================================================
+1. RINGKASAN PRODUK
+============================================================
+
+Nama Produk:
+SiapGuru Desktop
+
+Jenis Produk:
+Aplikasi desktop Windows berbasis Python yang dibuild menjadi file .exe
+
+Mode Penggunaan:
+100% Offline First
+
+Target Utama:
+Guru personal yang ingin mempercepat pekerjaan administrasi seperti input nilai, rekap nilai, ketuntasan KKM, deskripsi raport, export Excel, dan backup data.
+
+Value Proposition:
+SiapGuru Desktop membantu guru mengelola data siswa, nilai, ketuntasan, dan deskripsi raport tanpa harus ribet membuat rumus Excel manual.
+
+Masalah utama yang diselesaikan:
+1. Guru sering kesulitan rekap nilai manual.
+2. Rumus Excel sering error atau sulit dipahami.
+3. Menentukan siswa tuntas dan belum tuntas memakan waktu.
+4. Deskripsi raport ditulis satu per satu.
+5. File nilai sering berantakan.
+6. Guru butuh aplikasi offline yang bisa dipakai di laptop masing-masing.
+7. Guru tidak selalu punya koneksi internet stabil.
+
+Scope v1:
+1. Dashboard
+2. Data Siswa
+3. Data Kelas
+4. Mata Pelajaran
+5. Nilai
+6. Smart Ketuntasan / Simulasi Remedial
+7. Deskripsi Raport
+8. Export
+9. Backup & Restore
+10. Pengaturan
+
+Catatan penting:
+Istilah "nilai katrol" JANGAN digunakan di UI aplikasi. Gunakan istilah yang lebih aman dan profesional:
+- Smart Ketuntasan
+- Simulasi Remedial
+- Program Perbaikan Nilai
+- Penyesuaian Nilai Remedial
+
+============================================================
+2. TARGET USER
+============================================================
+
+Primary User:
+1. Guru SD
+2. Guru SMP
+3. Guru SMA / SMK
+4. Wali kelas
+5. Guru honorer
+6. Guru senior yang tidak terlalu nyaman dengan Excel
+
+Secondary User:
+1. Operator sekolah
+2. Admin akademik sekolah kecil
+3. Bimbel / lembaga kursus
+
+Karakter user:
+1. Ingin aplikasi simpel.
+2. Tidak ingin ribet login online.
+3. Ingin bisa langsung import / export Excel.
+4. Ingin hasil yang siap dipakai.
+5. Ingin tampilan mudah dibaca.
+6. Banyak yang menggunakan laptop Windows.
+
+============================================================
+3. TUJUAN PRODUK
+============================================================
+
+Tujuan utama:
+Membantu guru menyelesaikan administrasi nilai dan raport lebih cepat.
+
+Tujuan bisnis:
+1. Produk digital murah untuk guru personal.
+2. Bisa dijual melalui WhatsApp, TikTok, Facebook Group guru, dan komunitas sekolah.
+3. Cocok sebagai produk lisensi per semester / per tahun.
+4. Bisa dikembangkan bertahap menjadi all-in-one teacher productivity app.
+
+Tujuan teknis:
+1. Aplikasi berjalan offline.
+2. Database tersimpan lokal di komputer masing-masing.
+3. Tidak perlu server.
+4. Tidak perlu Supabase / cloud untuk v1.
+5. Bisa dibuild menjadi .exe.
+6. Data tetap tersimpan meski aplikasi ditutup.
+
+============================================================
+4. TEKNOLOGI YANG DIGUNAKAN
+============================================================
+
+Bahasa:
+Python 3.12+
+
+GUI Framework:
+PySide6
+
+Database:
+SQLite lokal
+
+Excel Handling:
+openpyxl
+pandas
+
+Build EXE:
+PyInstaller
+
+Optional ORM:
+SQLAlchemy
+
+Optional File Export:
+python-docx untuk Word di versi berikutnya
+reportlab untuk PDF di versi berikutnya
+
+Alasan pemilihan stack:
+1. Python mudah untuk olah data dan Excel.
+2. PySide6 bisa membuat UI desktop yang lebih modern dibanding Tkinter.
+3. SQLite cocok untuk aplikasi offline.
+4. PyInstaller bisa menghasilkan file .exe.
+5. openpyxl dan pandas kuat untuk import/export Excel.
+
+============================================================
+5. ARSITEKTUR APLIKASI
+============================================================
+
+Model:
+Offline local desktop app
+
+Setiap komputer memiliki database sendiri.
+
+Contoh:
+Laptop Guru A -> punya database sendiri
+Laptop Guru B -> punya database sendiri
+PC Operator -> punya database sendiri
+
+Lokasi database:
+C:\Users\{username}\AppData\Local\SiapGuru\siapguru.db
+
+Behavior saat aplikasi pertama dibuka:
+1. Aplikasi cek folder AppData/Local/SiapGuru.
+2. Jika folder belum ada, aplikasi membuat folder otomatis.
+3. Aplikasi cek file siapguru.db.
+4. Jika database belum ada, aplikasi membuat database otomatis.
+5. Aplikasi menjalankan schema initialization.
+6. Aplikasi membuat default settings.
+7. User diarahkan ke Dashboard / Pengaturan awal.
+
+============================================================
+6. STRUKTUR FOLDER PROJECT
+============================================================
+
+siapguru/
+│
+├── main.py
+├── requirements.txt
+├── README.txt
+│
+├── app/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── database.py
+│   ├── models.py
+│
+├── ui/
+│   ├── main_window.py
+│   ├── styles.qss
+│   ├── dialogs.py
+│   ├── widgets.py
+│
+├── pages/
+│   ├── dashboard_page.py
+│   ├── students_page.py
+│   ├── classes_page.py
+│   ├── subjects_page.py
+│   ├── grades_page.py
+│   ├── smart_ketuntasan_page.py
+│   ├── reports_page.py
+│   ├── export_page.py
+│   ├── backup_page.py
+│   ├── settings_page.py
+│
+├── services/
+│   ├── student_service.py
+│   ├── class_service.py
+│   ├── subject_service.py
+│   ├── grade_service.py
+│   ├── remedial_service.py
+│   ├── report_service.py
+│   ├── excel_service.py
+│   ├── backup_service.py
+│   ├── settings_service.py
+│
+├── assets/
+│   ├── logo.png
+│   ├── icon.ico
+│
+├── exports/
+│
+└── backups/
+
+============================================================
+7. UI DESIGN SYSTEM
+============================================================
+
+Style:
+Modern, bersih, ringan, tidak terlalu ramai, mudah dibaca guru.
+
+Font:
+Segoe UI
+
+Minimum Window:
+1280 x 720
+
+Recommended:
+1366 x 768
+
+Color Palette:
+Primary Blue: #2563EB
+Dark Blue: #0D1B4C
+Background: #F5F7FA
+White: #FFFFFF
+Text Dark: #111827
+Text Gray: #6B7280
+Border: #E5E7EB
+Success: #16A34A
+Warning: #F59E0B
+Danger: #DC2626
+
+Komponen UI:
+1. Sidebar kiri
+2. Topbar
+3. Page title
+4. Search input
+5. Filter dropdown
+6. Primary button
+7. Secondary button
+8. Data table
+9. Dialog form
+10. Status badge
+11. Summary card
+12. Confirmation modal
+13. Toast / popup notification
+
+============================================================
+8. MAIN UI LAYOUT
+============================================================
+
+Layout utama:
+
++-------------------------------------------------------------+
+| Sidebar 240px | Topbar                                      |
+|               |---------------------------------------------|
+| Dashboard     | Page Title       Search / Filter / Action   |
+| Data Siswa    |---------------------------------------------|
+| Data Kelas    |                                             |
+| Mapel         |              Main Content Area              |
+| Nilai         |                                             |
+| Ketuntasan    |                                             |
+| Deskripsi     |                                             |
+| Export        |                                             |
+| Backup        |                                             |
+| Pengaturan    |                                             |
++-------------------------------------------------------------+
+
+Sidebar:
+Width: 240px
+Background: #0D1B4C
+Text: White
+Active item: #2563EB
+Hover: rgba(255,255,255,0.1)
+
+Sidebar Menu:
+1. Dashboard
+2. Data Siswa
+3. Data Kelas
+4. Mata Pelajaran
+5. Nilai
+6. Smart Ketuntasan
+7. Deskripsi Raport
+8. Export
+9. Backup
+10. Pengaturan
+
+Topbar:
+Height: 64px
+Background: White
+Content:
+- Page title
+- Tahun ajaran aktif
+- Semester aktif
+- Optional search box
+- Optional action button
+
+============================================================
+9. ALUR UTAMA USER
+============================================================
+
+Alur pertama kali pakai:
+1. User buka aplikasi.
+2. Aplikasi membuat database lokal jika belum ada.
+3. User masuk ke menu Pengaturan.
+4. User isi nama sekolah, nama guru, tahun ajaran, semester, KKM, dan bobot nilai.
+5. User masuk ke menu Data Kelas.
+6. User tambah kelas.
+7. User masuk ke menu Mata Pelajaran.
+8. User tambah mata pelajaran.
+9. User masuk ke menu Data Siswa.
+10. User tambah siswa manual atau import Excel.
+11. User masuk ke menu Nilai.
+12. User pilih kelas dan mapel.
+13. User input nilai tugas, UTS, UAS.
+14. User klik Hitung Semua.
+15. Sistem menghitung nilai akhir, predikat, status KKM, dan ranking.
+16. User masuk ke Smart Ketuntasan.
+17. Sistem menampilkan siswa belum tuntas dan rekomendasi remedial.
+18. User bisa menerapkan rekomendasi secara manual.
+19. User masuk ke Deskripsi Raport.
+20. User generate deskripsi otomatis.
+21. User edit jika perlu.
+22. User export Excel.
+23. User backup database.
+
+============================================================
+10. MENU 1 — DASHBOARD
+============================================================
+
+Tujuan:
+Memberikan ringkasan cepat kepada guru tentang kondisi data dan nilai.
+
+Isi Dashboard:
+1. Total siswa
+2. Total kelas
+3. Total mata pelajaran
+4. Jumlah siswa belum tuntas
+5. Jumlah nilai belum lengkap
+6. Export terakhir
+7. Backup terakhir
+
+UI Layout:
+
+Dashboard
+Ringkasan data akademik Anda
+
+[Total Siswa] [Total Kelas] [Total Mapel] [Belum Tuntas]
+
+Quick Action:
+[Import Siswa] [Input Nilai] [Cek Ketuntasan] [Generate Deskripsi] [Export Excel]
+
+Tabel Siswa Belum Tuntas:
+Nama | Kelas | Mapel | Nilai | KKM | Status
+
+Alur penggunaan:
+1. User membuka Dashboard.
+2. Sistem mengambil ringkasan data dari database.
+3. User bisa klik shortcut untuk menuju menu tertentu.
+4. Jika ada siswa belum tuntas, tampilkan di tabel bawah.
+
+Action:
+- Import Siswa -> pindah ke menu Data Siswa
+- Input Nilai -> pindah ke menu Nilai
+- Cek Ketuntasan -> pindah ke Smart Ketuntasan
+- Generate Deskripsi -> pindah ke Deskripsi Raport
+- Export Excel -> pindah ke Export
+
+Validasi:
+Jika data kosong, tampilkan empty state:
+"Belum ada data. Mulai dengan menambahkan kelas dan siswa."
+
+============================================================
+11. MENU 2 — DATA SISWA
+============================================================
+
+Tujuan:
+Menyimpan dan mengelola data siswa.
+
+Data yang dikelola:
+1. Nama lengkap
+2. NIS
+3. NISN
+4. Jenis kelamin
+5. Kelas
+6. Alamat
+7. Nama orang tua
+8. Nomor WA orang tua
+
+UI Layout:
+
+Data Siswa
+
+[Search siswa...] [Filter Kelas] [Import Excel] [Export Excel] [Tambah Siswa]
+
+Tabel:
+No | Nama Siswa | NIS | NISN | Kelas | Gender | No. WA Ortu | Aksi
+
+Aksi per row:
+[Edit] [Hapus]
+
+Form Tambah/Edit:
+- Nama Lengkap *
+- NIS
+- NISN
+- Jenis Kelamin
+- Kelas *
+- Alamat
+- Nama Orang Tua
+- Nomor WA Orang Tua
+
+Alur tambah siswa:
+1. User klik Tambah Siswa.
+2. Dialog form muncul.
+3. User isi data wajib.
+4. User klik Simpan.
+5. Sistem validasi.
+6. Jika valid, data disimpan.
+7. Tabel refresh.
+
+Alur import siswa:
+1. User klik Import Excel.
+2. User pilih file .xlsx.
+3. Sistem cek kolom Excel.
+4. Sistem validasi data.
+5. Jika ada error, tampilkan daftar error.
+6. Jika valid, data masuk database.
+7. Tampilkan notifikasi berhasil.
+
+Template Excel siswa:
+nama_lengkap | nis | nisn | kelas | gender | alamat | nama_orang_tua | nomor_wa
+
+Validasi:
+1. Nama wajib diisi.
+2. Kelas wajib dipilih.
+3. NIS tidak boleh duplikat jika diisi.
+4. Nomor WA boleh kosong.
+5. Jika kelas belum ada, sistem bisa menawarkan membuat kelas baru.
+
+Relasi:
+Data Siswa digunakan oleh menu Nilai, Smart Ketuntasan, Deskripsi Raport, dan Export.
+
+============================================================
+12. MENU 3 — DATA KELAS
+============================================================
+
+Tujuan:
+Mengelompokkan siswa berdasarkan kelas.
+
+UI Layout:
+
+Data Kelas
+
+[Search kelas...] [Tambah Kelas]
+
+Tabel:
+No | Nama Kelas | Wali Kelas | Jumlah Siswa | Aksi
+
+Aksi:
+[Edit] [Hapus]
+
+Form:
+- Nama Kelas *
+- Wali Kelas
+
+Alur:
+1. User klik Tambah Kelas.
+2. Input nama kelas.
+3. Input wali kelas jika ada.
+4. Simpan.
+5. Kelas bisa dipilih di Data Siswa dan Nilai.
+
+Contoh kelas:
+- VII A
+- VII B
+- VIII A
+- X TKJ 1
+- XI IPA 2
+
+Validasi:
+1. Nama kelas wajib diisi.
+2. Nama kelas tidak boleh duplikat.
+3. Kelas tidak boleh dihapus jika masih punya siswa, kecuali user memindahkan atau menghapus siswa terlebih dahulu.
+
+Relasi:
+Kelas digunakan untuk filter siswa dan nilai.
+
+============================================================
+13. MENU 4 — MATA PELAJARAN
+============================================================
+
+Tujuan:
+Menyimpan daftar mata pelajaran yang diajar.
+
+UI Layout:
+
+Mata Pelajaran
+
+[Search mapel...] [Tambah Mapel]
+
+Tabel:
+No | Mata Pelajaran | Nama Guru | Aksi
+
+Aksi:
+[Edit] [Hapus]
+
+Form:
+- Nama Mata Pelajaran *
+- Nama Guru
+
+Alur:
+1. User klik Tambah Mapel.
+2. Isi nama mapel.
+3. Isi nama guru optional.
+4. Simpan.
+5. Mapel bisa dipilih di menu Nilai dan Deskripsi.
+
+Contoh mapel:
+- Matematika
+- Bahasa Indonesia
+- IPA
+- IPS
+- Bahasa Inggris
+- PPKN
+
+Validasi:
+1. Nama mapel wajib diisi.
+2. Nama mapel tidak boleh duplikat.
+3. Mapel tidak boleh dihapus jika masih memiliki data nilai, kecuali nilai terkait ikut dihapus.
+
+Relasi:
+Mapel digunakan dalam menu Nilai, Smart Ketuntasan, Deskripsi, dan Export.
+
+============================================================
+14. MENU 5 — NILAI
+============================================================
+
+Tujuan:
+Membantu guru input nilai dan menghitung nilai akhir otomatis.
+
+Data nilai:
+1. Nilai tugas
+2. Nilai UTS
+3. Nilai UAS
+4. Nilai tambahan optional
+5. Nilai akhir
+6. Predikat
+7. Status KKM
+8. Ranking
+
+UI Layout:
+
+Nilai Siswa
+
+[Filter Kelas] [Filter Mapel] [Import Nilai] [Hitung Semua] [Simpan] [Export]
+
+Tabel:
+Nama | Kelas | Tugas | UTS | UAS | Tambahan | Nilai Akhir | Predikat | Status | Ranking
+
+Alur input nilai:
+1. User pilih kelas.
+2. User pilih mata pelajaran.
+3. Sistem menampilkan daftar siswa di kelas tersebut.
+4. User input nilai Tugas, UTS, UAS.
+5. User klik Hitung Semua.
+6. Sistem menghitung nilai akhir.
+7. Sistem menentukan predikat.
+8. Sistem menentukan status Tuntas / Belum Tuntas.
+9. Sistem menghitung ranking.
+10. User klik Simpan.
+
+Formula default:
+Nilai Akhir =
+(Tugas x Bobot Tugas / 100) +
+(UTS x Bobot UTS / 100) +
+(UAS x Bobot UAS / 100)
+
+Bobot default:
+Tugas: 30
+UTS: 30
+UAS: 40
+
+Predikat:
+90 - 100 = A
+80 - 89 = B
+70 - 79 = C
+0 - 69 = D
+
+Status:
+Nilai >= KKM = Tuntas
+Nilai < KKM = Belum Tuntas
+
+Ranking:
+Ranking dihitung berdasarkan nilai akhir tertinggi dalam kelas dan mapel yang sama.
+
+Alur import nilai:
+1. User klik Import Nilai.
+2. Pilih file Excel.
+3. Sistem cek kolom.
+4. Sistem cocokkan siswa berdasarkan NIS atau nama.
+5. Sistem masukkan nilai.
+6. User klik Hitung Semua.
+7. Simpan.
+
+Template Excel nilai:
+nis | nama_lengkap | kelas | mata_pelajaran | tugas | uts | uas
+
+Validasi:
+1. Nilai harus 0 sampai 100.
+2. Bobot nilai harus total 100.
+3. Kelas dan mapel wajib dipilih.
+4. Jika siswa tidak ditemukan saat import, tampilkan error.
+5. Jika nilai kosong, anggap 0 atau tampilkan warning, tergantung setting.
+
+Relasi:
+Nilai menjadi sumber untuk Smart Ketuntasan, Deskripsi Raport, Dashboard, dan Export.
+
+============================================================
+15. MENU 6 — SMART KETUNTASAN / SIMULASI REMEDIAL
+============================================================
+
+Tujuan:
+Membantu guru melihat siswa yang belum tuntas dan memberikan simulasi nilai remedial secara aman dan profesional.
+
+Catatan:
+Fitur ini adalah versi aman dari kebutuhan "nilai katrol". Jangan tampilkan kata "katrol" di aplikasi.
+
+Nama menu yang direkomendasikan:
+Smart Ketuntasan
+
+Alternatif nama:
+1. Simulasi Remedial
+2. Program Perbaikan Nilai
+3. Penyesuaian Ketuntasan
+
+Tujuan fitur:
+1. Mendeteksi siswa di bawah KKM.
+2. Memberikan rekomendasi nilai remedial.
+3. Membantu guru membuat keputusan.
+4. Menyimpan nilai asli dan nilai setelah remedial.
+5. Menjaga proses tetap transparan.
+
+UI Layout:
+
+Smart Ketuntasan
+
+[Filter Kelas] [Filter Mapel] [Cek Siswa Belum Tuntas] [Terapkan Rekomendasi Ringan] [Simpan]
+
+Tabel:
+Nama | Kelas | Mapel | Nilai Awal | KKM | Selisih | Rekomendasi | Nilai Remedial | Status | Aksi
+
+Contoh:
+Ani | VII A | Matematika | 72 | 75 | -3 | 76 | [input] | Ringan | Terapkan
+Budi | VII A | Matematika | 65 | 75 | -10 | 75 | [input] | Perlu Remedial | Manual
+Citra | VII A | Matematika | 48 | 75 | -27 | Review Manual | [input] | Berat | Manual
+
+Kategori rekomendasi:
+1. Ringan:
+   Nilai 70 - 74 jika KKM 75
+   Rekomendasi: naik ke KKM atau KKM + 1
+   Contoh: 72 -> 75 atau 76
+
+2. Sedang:
+   Nilai 60 - 69
+   Rekomendasi: perlu remedial tugas / ujian ulang
+   Sistem bisa memberi rekomendasi nilai minimal KKM, tapi tidak otomatis diterapkan massal.
+
+3. Berat:
+   Nilai di bawah 60
+   Rekomendasi: review manual oleh guru
+   Sistem tidak boleh otomatis menaikkan semua.
+   Tampilkan warning.
+
+Logic rekomendasi:
+Jika nilai >= KKM:
+Status = Tuntas
+Tidak perlu rekomendasi
+
+Jika nilai < KKM dan selisih <= 5:
+Rekomendasi = KKM atau KKM + 1
+Status = Remedial Ringan
+
+Jika nilai < KKM dan selisih 6 sampai 15:
+Rekomendasi = KKM
+Status = Perlu Remedial
+
+Jika nilai < KKM dan selisih > 15:
+Rekomendasi = Review Manual
+Status = Perlu Evaluasi
+
+Aturan penting:
+1. Nilai asli tidak boleh dihapus.
+2. Sistem menyimpan original_score.
+3. Sistem menyimpan remedial_score.
+4. Sistem menyimpan adjusted_score.
+5. Sistem menyimpan alasan / notes.
+6. Guru harus klik Terapkan secara manual.
+7. Fitur "Terapkan Semua" hanya berlaku untuk kategori Ringan.
+8. Setiap perubahan harus bisa di-reset.
+
+Alur penggunaan:
+1. User buka Smart Ketuntasan.
+2. User pilih kelas dan mapel.
+3. Sistem menampilkan siswa belum tuntas.
+4. Sistem memberi rekomendasi.
+5. User cek rekomendasi.
+6. User klik Terapkan pada siswa tertentu atau Terapkan Rekomendasi Ringan.
+7. Sistem menyimpan nilai remedial.
+8. Sistem update nilai akhir adjusted.
+9. Status berubah menjadi Tuntas Setelah Remedial atau Belum Tuntas.
+10. User simpan hasil.
+
+Status akhir:
+1. Tuntas
+2. Belum Tuntas
+3. Tuntas Setelah Remedial
+4. Perlu Evaluasi Manual
+
+Database tambahan yang diperlukan:
+Tabel remedial_records
+
+Kolom:
+id
+grade_id
+student_id
+subject_id
+original_score
+recommended_score
+remedial_score
+adjusted_score
+remedial_status
+notes
+created_at
+updated_at
+
+Relasi:
+Smart Ketuntasan membaca data dari grades dan settings.
+Smart Ketuntasan menyimpan data ke remedial_records.
+Hasilnya bisa digunakan oleh Deskripsi Raport dan Export.
+
+============================================================
+16. MENU 7 — DESKRIPSI RAPORT
+============================================================
+
+Tujuan:
+Membantu guru membuat deskripsi raport otomatis berdasarkan nilai, predikat, status, dan kondisi ketuntasan.
+
+UI Layout:
+
+Deskripsi Raport
+
+[Filter Kelas] [Filter Mapel] [Generate Semua] [Simpan Semua] [Export]
+
+Tabel:
+Nama | Nilai | Predikat | Status | Deskripsi | Aksi
+
+Aksi:
+[Generate] [Copy] [Edit] [Simpan]
+
+Alur:
+1. User pilih kelas.
+2. User pilih mapel.
+3. Sistem mengambil data nilai.
+4. User klik Generate Semua.
+5. Sistem membuat deskripsi berdasarkan predikat dan status.
+6. User bisa edit manual.
+7. User klik Simpan Semua.
+8. Deskripsi tersimpan di database.
+9. User bisa export.
+
+Rule deskripsi default:
+
+Predikat A:
+"Menunjukkan penguasaan materi yang sangat baik dan aktif dalam pembelajaran."
+
+Predikat B:
+"Memahami materi dengan baik dan menunjukkan perkembangan positif."
+
+Predikat C:
+"Cukup memahami materi, perlu peningkatan konsistensi belajar."
+
+Predikat D:
+"Perlu pendampingan lebih lanjut dalam memahami materi."
+
+Tambahan jika status Tuntas Setelah Remedial:
+"Setelah mengikuti program perbaikan, siswa menunjukkan peningkatan hasil belajar."
+
+Tambahan jika Belum Tuntas:
+"Perlu pendampingan dan latihan lanjutan agar pemahaman materi semakin baik."
+
+Contoh hasil:
+"Ani menunjukkan penguasaan materi yang baik dan menunjukkan perkembangan positif dalam pembelajaran Matematika."
+
+Optional template:
+{nama} {deskripsi_predikat} pada mata pelajaran {mapel}.
+
+Validasi:
+1. Nilai harus sudah ada.
+2. Predikat harus sudah dihitung.
+3. Deskripsi bisa diedit manual.
+4. Jika deskripsi sudah ada, generate ulang harus minta konfirmasi.
+
+Relasi:
+Deskripsi membaca grades, remedial_records, students, subjects.
+Deskripsi disimpan ke report_descriptions.
+
+============================================================
+17. MENU 8 — EXPORT
+============================================================
+
+Tujuan:
+Membantu guru mengeluarkan hasil kerja dalam format Excel atau CSV.
+
+UI Layout:
+
+Export Data
+
+Pilihan Export:
+[Export Data Siswa]
+[Export Nilai]
+[Export Deskripsi Raport]
+[Export Smart Ketuntasan]
+[Export Semua Data]
+
+Filter:
+[Filter Kelas]
+[Filter Mapel]
+[Format: XLSX / CSV]
+
+Alur export:
+1. User pilih jenis export.
+2. User pilih kelas/mapel jika perlu.
+3. User pilih lokasi simpan.
+4. Sistem membuat file.
+5. Notifikasi berhasil.
+6. User bisa buka folder export.
+
+Export Data Siswa columns:
+No
+Nama Siswa
+NIS
+NISN
+Kelas
+Gender
+Alamat
+Nama Orang Tua
+Nomor WA Orang Tua
+
+Export Nilai columns:
+No
+Nama Siswa
+NIS
+Kelas
+Mata Pelajaran
+Tugas
+UTS
+UAS
+Nilai Akhir
+Predikat
+Status
+Ranking
+
+Export Smart Ketuntasan columns:
+No
+Nama Siswa
+Kelas
+Mapel
+Nilai Awal
+KKM
+Rekomendasi
+Nilai Remedial
+Nilai Setelah Remedial
+Status Remedial
+Catatan
+
+Export Deskripsi Raport columns:
+No
+Nama Siswa
+Kelas
+Mapel
+Nilai Akhir
+Predikat
+Status
+Deskripsi
+
+File naming:
+data_siswa_YYYYMMDD.xlsx
+nilai_kelas_mapel_YYYYMMDD.xlsx
+deskripsi_raport_YYYYMMDD.xlsx
+smart_ketuntasan_YYYYMMDD.xlsx
+
+Validasi:
+1. Jika data kosong, tampilkan pesan.
+2. Jika file sedang dibuka di Excel dan tidak bisa ditimpa, tampilkan error.
+3. Jika folder export tidak ada, buat otomatis.
+
+============================================================
+18. MENU 9 — BACKUP & RESTORE
+============================================================
+
+Tujuan:
+Menghindari kehilangan data dan memudahkan pemindahan data antar komputer.
+
+UI Layout:
+
+Backup & Restore
+
+[Backup Sekarang]
+[Restore Database]
+[Open Backup Folder]
+
+Riwayat Backup:
+Tanggal | Nama File | Lokasi | Aksi
+
+Alur backup:
+1. User klik Backup Sekarang.
+2. Sistem copy file siapguru.db.
+3. File disimpan ke folder backups.
+4. Nama file menggunakan timestamp.
+5. Riwayat backup disimpan di tabel backups.
+6. Notifikasi berhasil.
+
+Format file backup:
+backup_siapguru_YYYYMMDD_HHMM.db
+
+Alur restore:
+1. User klik Restore Database.
+2. User pilih file .db.
+3. Sistem validasi struktur database.
+4. Sistem tampilkan konfirmasi:
+   "Restore akan mengganti data saat ini. Lanjutkan?"
+5. Jika user setuju, database aktif diganti.
+6. Aplikasi restart atau minta user buka ulang.
+
+Validasi:
+1. File harus .db.
+2. File harus memiliki tabel wajib.
+3. Jika file rusak, tampilkan error.
+4. Sebelum restore, sistem bisa membuat backup otomatis dari DB saat ini.
+
+Relasi:
+Backup mengambil seluruh database aplikasi.
+
+============================================================
+19. MENU 10 — PENGATURAN
+============================================================
+
+Tujuan:
+Mengatur profil sekolah, guru, tahun ajaran, semester, KKM, dan bobot nilai.
+
+UI Layout:
+
+Pengaturan
+
+Profil:
+Nama Sekolah      [________________]
+Nama Guru         [________________]
+Tahun Ajaran      [2025/2026]
+Semester          [Ganjil/Genap]
+
+Nilai:
+KKM               [75]
+
+Bobot Nilai:
+Tugas             [30]
+UTS               [30]
+UAS               [40]
+
+[Simpan Pengaturan]
+
+Alur:
+1. User buka Pengaturan.
+2. Sistem menampilkan setting saat ini.
+3. User mengubah data.
+4. User klik Simpan.
+5. Sistem validasi.
+6. Jika valid, simpan ke database.
+7. Pengaturan digunakan di menu Nilai dan Smart Ketuntasan.
+
+Validasi:
+1. KKM harus 0 - 100.
+2. Bobot tugas + UTS + UAS harus 100.
+3. Tahun ajaran boleh bebas teks.
+4. Semester pilihan: Ganjil / Genap.
+5. Jika bobot tidak 100, tampilkan error:
+   "Total bobot nilai harus 100."
+
+============================================================
+20. DATABASE SCHEMA LENGKAP
+============================================================
+
+Database:
+SQLite
+
+Lokasi:
+C:\Users\{username}\AppData\Local\SiapGuru\siapguru.db
+
+------------------------------------------------------------
+20.1 settings
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    school_name TEXT,
+    teacher_name TEXT,
+    academic_year TEXT,
+    semester TEXT,
+    kkm INTEGER DEFAULT 75,
+    weight_task INTEGER DEFAULT 30,
+    weight_mid INTEGER DEFAULT 30,
+    weight_final INTEGER DEFAULT 40,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+------------------------------------------------------------
+20.2 classes
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS classes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    class_name TEXT NOT NULL UNIQUE,
+    homeroom_teacher TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+------------------------------------------------------------
+20.3 students
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS students (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nis TEXT UNIQUE,
+    nisn TEXT,
+    full_name TEXT NOT NULL,
+    gender TEXT,
+    class_id INTEGER,
+    address TEXT,
+    parent_name TEXT,
+    parent_phone TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (class_id) REFERENCES classes(id)
+);
+
+------------------------------------------------------------
+20.4 subjects
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS subjects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_name TEXT NOT NULL UNIQUE,
+    teacher_name TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+------------------------------------------------------------
+20.5 grades
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS grades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    subject_id INTEGER NOT NULL,
+    task_score REAL DEFAULT 0,
+    mid_score REAL DEFAULT 0,
+    final_score REAL DEFAULT 0,
+    extra_score REAL DEFAULT 0,
+    final_result REAL DEFAULT 0,
+    predicate TEXT,
+    status TEXT,
+    rank_number INTEGER,
+    notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES students(id),
+    FOREIGN KEY (subject_id) REFERENCES subjects(id),
+    UNIQUE(student_id, subject_id)
+);
+
+------------------------------------------------------------
+20.6 remedial_records
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS remedial_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    grade_id INTEGER NOT NULL,
+    student_id INTEGER NOT NULL,
+    subject_id INTEGER NOT NULL,
+    original_score REAL NOT NULL,
+    recommended_score REAL,
+    remedial_score REAL,
+    adjusted_score REAL,
+    remedial_status TEXT,
+    notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (grade_id) REFERENCES grades(id),
+    FOREIGN KEY (student_id) REFERENCES students(id),
+    FOREIGN KEY (subject_id) REFERENCES subjects(id)
+);
+
+------------------------------------------------------------
+20.7 report_descriptions
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS report_descriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    subject_id INTEGER NOT NULL,
+    grade_id INTEGER,
+    description TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES students(id),
+    FOREIGN KEY (subject_id) REFERENCES subjects(id),
+    FOREIGN KEY (grade_id) REFERENCES grades(id),
+    UNIQUE(student_id, subject_id)
+);
+
+------------------------------------------------------------
+20.8 backups
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS backups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    backup_name TEXT,
+    backup_path TEXT,
+    backup_date TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+------------------------------------------------------------
+20.9 app_logs optional
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS app_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    level TEXT,
+    message TEXT,
+    details TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+============================================================
+21. CORE SERVICES
+============================================================
+
+21.1 DatabaseService
+Tujuan:
+Mengelola koneksi database dan inisialisasi schema.
+
+Fungsi:
+- get_db_path()
+- init_database()
+- create_tables()
+- run_query()
+- fetch_all()
+- fetch_one()
+- execute()
+- close_connection()
+
+21.2 SettingsService
+Tujuan:
+Mengelola pengaturan aplikasi.
+
+Fungsi:
+- get_settings()
+- update_settings()
+- validate_weights()
+- get_kkm()
+
+21.3 ClassService
+Tujuan:
+Mengelola data kelas.
+
+Fungsi:
+- add_class()
+- update_class()
+- delete_class()
+- get_classes()
+- get_class_by_id()
+
+21.4 SubjectService
+Tujuan:
+Mengelola mata pelajaran.
+
+Fungsi:
+- add_subject()
+- update_subject()
+- delete_subject()
+- get_subjects()
+- get_subject_by_id()
+
+21.5 StudentService
+Tujuan:
+Mengelola data siswa.
+
+Fungsi:
+- add_student()
+- update_student()
+- delete_student()
+- search_students()
+- get_students_by_class()
+- import_students()
+- export_students()
+
+21.6 GradeService
+Tujuan:
+Mengelola nilai siswa.
+
+Fungsi:
+- save_grade()
+- calculate_final_score()
+- get_predicate()
+- get_status()
+- calculate_ranking()
+- import_grades()
+- export_grades()
+
+21.7 RemedialService
+Tujuan:
+Mengelola Smart Ketuntasan.
+
+Fungsi:
+- get_below_kkm_students()
+- generate_recommendation()
+- apply_recommendation()
+- apply_light_recommendations()
+- reset_remedial()
+- save_remedial_record()
+
+21.8 ReportService
+Tujuan:
+Mengelola deskripsi raport.
+
+Fungsi:
+- generate_description()
+- generate_all_descriptions()
+- save_description()
+- copy_description()
+- export_descriptions()
+
+21.9 ExcelService
+Tujuan:
+Mengelola import dan export Excel.
+
+Fungsi:
+- validate_excel_columns()
+- import_students_excel()
+- import_grades_excel()
+- export_students_excel()
+- export_grades_excel()
+- export_reports_excel()
+- export_remedial_excel()
+
+21.10 BackupService
+Tujuan:
+Mengelola backup dan restore.
+
+Fungsi:
+- backup_database()
+- restore_database()
+- validate_backup_file()
+- get_backup_history()
+- open_backup_folder()
+
+============================================================
+22. VALIDATION & ERROR HANDLING
+============================================================
+
+Prinsip:
+Aplikasi tidak boleh crash untuk error umum. Semua error harus ditampilkan dengan pesan yang mudah dimengerti.
+
+Error Excel format:
+"Format Excel tidak sesuai. Silakan gunakan template yang disediakan."
+
+Duplicate NIS:
+"NIS sudah digunakan oleh siswa lain."
+
+Required field empty:
+"Data wajib belum lengkap."
+
+Nilai di luar range:
+"Nilai harus berada di antara 0 sampai 100."
+
+Bobot tidak 100:
+"Total bobot nilai harus 100."
+
+Database error:
+"Terjadi masalah pada database. Silakan lakukan backup atau hubungi support."
+
+Restore error:
+"File backup tidak valid atau rusak."
+
+File locked:
+"File sedang dibuka di aplikasi lain. Tutup file terlebih dahulu lalu coba lagi."
+
+============================================================
+23. ACCEPTANCE CRITERIA
+============================================================
+
+Aplikasi:
+1. Bisa dibuka di Windows.
+2. Bisa berjalan offline.
+3. Database otomatis dibuat.
+4. Data tetap tersimpan setelah aplikasi ditutup.
+5. UI sidebar bisa berpindah halaman.
+6. Tidak crash saat input salah.
+
+Data Siswa:
+1. Bisa tambah siswa.
+2. Bisa edit siswa.
+3. Bisa hapus siswa.
+4. Bisa import Excel.
+5. Bisa export Excel.
+6. Bisa search dan filter.
+
+Kelas:
+1. Bisa tambah kelas.
+2. Bisa edit kelas.
+3. Bisa hapus kelas.
+4. Bisa dipakai di Data Siswa dan Nilai.
+
+Mapel:
+1. Bisa tambah mapel.
+2. Bisa edit mapel.
+3. Bisa hapus mapel.
+4. Bisa dipakai di Nilai.
+
+Nilai:
+1. Bisa input nilai.
+2. Bisa hitung nilai akhir.
+3. Bisa predikat otomatis.
+4. Bisa status KKM otomatis.
+5. Bisa ranking.
+6. Bisa simpan nilai.
+
+Smart Ketuntasan:
+1. Bisa menampilkan siswa belum tuntas.
+2. Bisa memberi rekomendasi remedial.
+3. Bisa menyimpan nilai asli dan nilai remedial.
+4. Bisa menerapkan rekomendasi ringan.
+5. Bisa reset.
+6. Tidak menggunakan istilah "katrol" di UI.
+
+Deskripsi Raport:
+1. Bisa generate deskripsi.
+2. Bisa edit manual.
+3. Bisa copy.
+4. Bisa simpan.
+5. Bisa export.
+
+Export:
+1. Bisa export siswa.
+2. Bisa export nilai.
+3. Bisa export deskripsi.
+4. Bisa export smart ketuntasan.
+
+Backup:
+1. Bisa backup database.
+2. Bisa restore database.
+3. Bisa melihat riwayat backup.
+
+Pengaturan:
+1. Bisa simpan nama sekolah.
+2. Bisa simpan KKM.
+3. Bisa simpan bobot nilai.
+4. Validasi bobot harus 100.
+
+============================================================
+24. BUILD REQUIREMENT
+============================================================
+
+requirements.txt:
+
+PySide6
+openpyxl
+pandas
+SQLAlchemy
+pyinstaller
+
+Build command:
+
+pyinstaller --onefile --windowed --icon=assets/icon.ico main.py
+
+Output:
+
+dist/SiapGuru.exe
+
+============================================================
+25. ROADMAP
+============================================================
+
+v1.0:
+- Dashboard
+- Data siswa
+- Kelas
+- Mapel
+- Nilai
+- Smart Ketuntasan
+- Deskripsi Raport
+- Export
+- Backup
+- Pengaturan
+
+v1.1:
+- Trial 7 hari
+- License key offline
+- Aktivasi device
+
+v2:
+- Absensi siswa
+- Rekap absensi bulanan
+- Template WhatsApp orang tua
+
+v3:
+- RPP Generator
+- Modul Ajar
+- Bank Soal
+- Export Word
+
+v4:
+- Cloud sync
+- Multi device
+- Web dashboard
+- Login online
+
+============================================================
+26. AI BUILDER PROMPT
+============================================================
+
+Build a complete modular production-ready Windows desktop application using Python PySide6 named "SiapGuru Desktop".
+
+The app must be offline-first and use SQLite local database.
+
+Create a modern clean blue UI with left sidebar navigation.
+
+Pages required:
+1. Dashboard
+2. Data Siswa
+3. Data Kelas
+4. Mata Pelajaran
+5. Nilai
+6. Smart Ketuntasan
+7. Deskripsi Raport
+8. Export
+9. Backup
+10. Pengaturan
+
+Main features:
+- Student CRUD
+- Class CRUD
+- Subject CRUD
+- Grade input
+- Automatic grade calculation
+- Predicate generation
+- KKM status
+- Ranking
+- Smart Ketuntasan / remedial simulation
+- Preserve original score and remedial score
+- Report description generator
+- Excel import
+- Excel export
+- SQLite database auto initialization
+- Backup and restore database
+- Settings page for KKM and grade weights
+
+UI requirements:
+- Sidebar width 240px
+- Dark blue sidebar
+- White content background
+- Blue primary buttons
+- Dashboard cards
+- Search and filter on tables
+- Form dialogs for add/edit
+- Status badges
+- Minimum window 1280x720
+
+Database:
+Use SQLite and create database automatically at:
+AppData/Local/SiapGuru/siapguru.db
+
+Required tables:
+- settings
+- classes
+- students
+- subjects
+- grades
+- remedial_records
+- report_descriptions
+- backups
+- app_logs optional
+
+Grade formula:
+Final Score = task_score * weight_task / 100 + mid_score * weight_mid / 100 + final_score * weight_final / 100
+
+Predicate:
+90-100 = A
+80-89 = B
+70-79 = C
+0-69 = D
+
+Status:
+>= KKM = Tuntas
+< KKM = Belum Tuntas
+
+Smart Ketuntasan:
+Do not use the term "katrol" in UI.
+Use "Smart Ketuntasan" or "Simulasi Remedial".
+Detect students below KKM.
+Generate recommendation:
+- Difference <= 5: recommend KKM or KKM + 1
+- Difference 6-15: recommend remedial manual
+- Difference > 15: review manual
+Preserve original score.
+Save remedial record.
+Allow manual apply and reset.
+
+Generate modular code with:
+- main.py
+- app/database.py
+- services
+- pages
+- reusable widgets
+- QSS styling
+- requirements.txt
+- PyInstaller build instruction
+
+Make sure the app can run immediately after installing requirements.

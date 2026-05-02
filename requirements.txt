@@ -1,0 +1,7 @@
+PySide6
+openpyxl
+pandas
+SQLAlchemy
+pyinstaller
+firebase-admin
+google-cloud-firestore
