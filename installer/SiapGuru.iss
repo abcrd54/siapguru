@@ -1,8 +1,8 @@
 #define MyAppName "SiapGuru"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1"
 #define MyAppPublisher "SiapDigital"
 #define MyAppExeName "SiapGuru.exe"
-#define MyAppSource "..\\dist\\SiapGuru.exe"
+#define MyAppSource "..\\dist_release\\SiapGuru.exe"
 #define MyAppIcon "..\\assets\\icon.ico"
 
 [Setup]
@@ -14,7 +14,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=..\installer_output
-OutputBaseFilename=Setup-SiapGuru-{#MyAppVersion}
+OutputBaseFilename=Setup-SiapGuru-v{#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
