@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QTableWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QTableWidget, QVBoxLayout, QWidget
 
-from ui.dialogs import confirm, error, info
+from ui.dialogs import error, info
 from ui.widgets import ActionButton, PageHeader, fill_table, set_table_headers
 
 
@@ -12,16 +12,20 @@ class BackupPage(QWidget):
         self.services = services
 
         layout = QVBoxLayout(self)
-        layout.addWidget(PageHeader("Backup Data", "Simpan cadangan data dan pulihkan bila diperlukan."))
+        layout.addWidget(
+            PageHeader(
+                "Backup Data",
+                "Simpan cadangan workspace aktif. Pemulihan backup dilakukan dari layar awal saat memilih workspace.",
+            )
+        )
         controls = QHBoxLayout()
         backup_button = ActionButton("Backup Sekarang", primary=True)
-        restore_button = ActionButton("Pulihkan Data")
         folder_button = ActionButton("Buka Folder Backup")
         backup_button.clicked.connect(self.backup_now)
-        restore_button.clicked.connect(self.restore_db)
         folder_button.clicked.connect(self.services["backup"].open_backup_folder)
-        for widget in (backup_button, restore_button, folder_button):
+        for widget in (backup_button, folder_button):
             controls.addWidget(widget)
+        controls.addStretch()
         layout.addLayout(controls)
 
         self.table = QTableWidget()
@@ -38,18 +42,5 @@ class BackupPage(QWidget):
             path = self.services["backup"].backup_database()
             self.refresh()
             info(self, f"Backup berhasil: {path}")
-        except Exception as exc:
-            error(self, str(exc))
-
-    def restore_db(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(self, "Pulihkan Data", "", "Database Files (*.db)")
-        if not file_path:
-            return
-        if not confirm(self, "Restore akan mengganti data saat ini. Lanjutkan?"):
-            return
-        try:
-            self.services["backup"].restore_database(file_path)
-            self.refresh()
-            info(self, "Restore selesai. Silakan buka ulang aplikasi jika diperlukan.")
         except Exception as exc:
             error(self, str(exc))

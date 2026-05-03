@@ -60,7 +60,7 @@ class LocalLicenseProvider(BaseLicenseProvider):
                 enabled_modes=[],
                 customer_name=str(state.get("customer_name", "") or ""),
                 active_key="",
-                notes="Aplikasi belum diaktivasi. Masukkan key untuk membuka workspace.",
+                notes="Aplikasi belum diaktivasi. Masukkan key untuk membuka dashboard guru.",
                 is_activated=False,
             )
         enabled_modes = self._clean_modes(state.get("enabled_modes", []))
@@ -165,21 +165,9 @@ class LocalLicenseProvider(BaseLicenseProvider):
         return [
             {
                 "key": "SG-GURU-001",
-                "customer_name": "Testing Guru Mapel",
-                "enabled_modes": ["guru_mapel"],
-                "notes": "Key testing lokal untuk workspace Guru Mapel.",
-            },
-            {
-                "key": "SG-WALI-001",
-                "customer_name": "Testing Wali Kelas",
-                "enabled_modes": ["wali_kelas"],
-                "notes": "Key testing lokal untuk workspace Wali Kelas.",
-            },
-            {
-                "key": "SG-DUAL-001",
-                "customer_name": "Testing Dual Workspace",
-                "enabled_modes": ["guru_mapel", "wali_kelas"],
-                "notes": "Key testing lokal untuk membuka dua workspace sekaligus.",
+                "customer_name": "Testing Guru",
+                "enabled_modes": ["guru"],
+                "notes": "Key testing lokal untuk membuka dashboard guru.",
             },
         ]
 
@@ -206,7 +194,7 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
             return LicenseProfile(
                 source=self.source_name,
                 enabled_modes=[],
-                notes="Aplikasi belum diaktivasi. Masukkan key Firebase untuk membuka workspace.",
+                notes="Aplikasi belum diaktivasi. Masukkan key Firebase untuk membuka dashboard guru.",
                 is_activated=False,
             )
         if self._is_cache_still_valid(cached):
@@ -266,6 +254,13 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
         except ImportError as exc:
             raise RuntimeError("Library Firebase belum terpasang. Jalankan instalasi dependency terbaru.") from exc
 
+        if self.credentials_path and not Path(self.credentials_path).exists():
+            raise RuntimeError("File kredensial Firebase tidak ditemukan. Atur SIAPGURU_FIREBASE_CREDENTIALS dengan path yang valid.")
+        if not self.credentials_path and not self.project_id:
+            raise RuntimeError(
+                "Konfigurasi Firebase belum lengkap. Atur SIAPGURU_FIREBASE_PROJECT_ID dan SIAPGURU_FIREBASE_CREDENTIALS."
+            )
+
         app_name = "siapguru-license"
         try:
             app = firebase_admin.get_app(app_name)
@@ -296,7 +291,11 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
         return payload
 
     def _validate_license_document(self, payload: dict, key: str) -> None:
-        if str(payload.get("license_key", "") or "").strip() != key:
+        stored_key = str(payload.get("license_key", "") or "").strip()
+        document_key = str(payload.get("docId", "") or "").strip()
+        if stored_key and stored_key != key:
+            raise ValueError("Key tidak cocok dengan data Firebase.")
+        if not stored_key and document_key and document_key != key:
             raise ValueError("Key tidak cocok dengan data Firebase.")
         if str(payload.get("app_id", "") or "").strip().lower() != "siapguru":
             raise ValueError("Key ini bukan untuk aplikasi SiapGuru.")
@@ -330,7 +329,15 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
         used_devices = current.get("used_devices") or []
         if not isinstance(used_devices, list):
             used_devices = []
-        if not any(str(item.get("device_id", "") or "") == device_id for item in used_devices if isinstance(item, dict)):
+        max_devices = int(current.get("max_devices", payload.get("max_devices", 1)) or 1)
+        existing_device = any(
+            str(item.get("device_id", "") or "") == device_id
+            for item in used_devices
+            if isinstance(item, dict)
+        )
+        if not existing_device and len(used_devices) >= max_devices:
+            raise ValueError("Batas perangkat untuk key ini sudah tercapai.")
+        if not existing_device:
             used_devices.append(
                 {
                     "device_id": device_id,
@@ -374,19 +381,12 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
 
     def _extract_enabled_modes(self, payload: dict) -> list[str]:
         features = payload.get("features") or {}
-        enabled: list[str] = []
         if isinstance(features, dict):
-            if bool(features.get("guru_mapel")):
-                enabled.append("guru_mapel")
-            if bool(features.get("wali_kelas")):
-                enabled.append("wali_kelas")
-        if enabled:
-            return enabled
+            if bool(features.get("guru")):
+                return ["guru"]
         role = str(payload.get("license_role", "") or "").strip().lower()
         role_map = {
-            "guru_mapel": ["guru_mapel"],
-            "wali_kelas": ["wali_kelas"],
-            "full_access": ["guru_mapel", "wali_kelas"],
+            "guru": ["guru"],
         }
         return role_map.get(role, [])
 

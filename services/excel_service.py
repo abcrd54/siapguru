@@ -76,7 +76,7 @@ class ExcelService:
         frame = pd.DataFrame(rows, columns=columns)
         return self.export_dataframe(frame, "template_import_data_siswa", subfolder="template")
 
-    def create_grade_template(self, subject_id: int | None = None) -> str:
+    def create_grade_template(self, subject_id: int | None = None, class_id: int | None = None) -> str:
         if subject_id:
             active_layout = self.grade_service.get_component_layout(subject_id)
             subject = self.subject_service.get_subject_by_id(subject_id)
@@ -88,26 +88,39 @@ class ExcelService:
                 if int(component["is_active"]) == 1
             ]
             subject_name = "Matematika"
-        component_codes = [component["component_code"] for component in active_layout]
-        columns = ["nis", "nama_lengkap", "kelas", "mata_pelajaran", *component_codes, "tambahan"]
-        rows = [
-            {
-                "nis": "1001",
-                "nama_lengkap": "Ahmad Fauzi",
-                "kelas": "VII A",
-                "mata_pelajaran": subject_name,
-                **{code: value for code, value in zip(component_codes, [80, 78, 82, "", "", 76, 84, "", "", "", "", ""])},
-                "tambahan": 0,
-            },
-            {
-                "nis": "1002",
-                "nama_lengkap": "Siti Aisyah",
-                "kelas": "VII A",
-                "mata_pelajaran": subject_name,
-                **{code: value for code, value in zip(component_codes, [88, 90, 87, "", "", 86, 89, "", "", "", "", ""])},
-                "tambahan": 0,
-            },
-        ]
+        component_map = {component["component_name"]: component["component_code"] for component in active_layout}
+        component_headers = list(component_map.keys())
+        columns = ["nis", "nama_lengkap", "kelas", "mata_pelajaran", *component_headers]
+        rows: list[dict] = []
+        if class_id:
+            students = self.student_service.search_students(class_id=class_id)
+            for student in students:
+                rows.append(
+                    {
+                        "nis": student.get("nis", ""),
+                        "nama_lengkap": student.get("full_name", ""),
+                        "kelas": student.get("class_name", ""),
+                        "mata_pelajaran": subject_name,
+                        **{header: "" for header in component_headers},
+                    }
+                )
+        if not rows:
+            rows = [
+                {
+                    "nis": "1001",
+                    "nama_lengkap": "Ahmad Fauzi",
+                    "kelas": "VII A",
+                    "mata_pelajaran": subject_name,
+                    **{header: "" for header in component_headers},
+                },
+                {
+                    "nis": "1002",
+                    "nama_lengkap": "Siti Aisyah",
+                    "kelas": "VII A",
+                    "mata_pelajaran": subject_name,
+                    **{header: "" for header in component_headers},
+                },
+            ]
         frame = pd.DataFrame(rows, columns=columns)
         return self.export_dataframe(frame, "template_import_nilai", subfolder="template")
 
@@ -161,11 +174,7 @@ class ExcelService:
                 subjects = {item["subject_name"]: item["id"] for item in self.subject_service.get_subjects()}
             subject_id = subjects[subject_name]
             active_layout = self.grade_service.get_component_layout(subject_id)
-            active_component_codes = [
-                component["component_code"]
-                for component in active_layout
-                if component["component_code"] not in {"uts", "uas"}
-            ]
+            header_to_code = {str(component["component_name"]).strip().lower(): component["component_code"] for component in active_layout}
             match = next(
                 (
                     item for item in students
@@ -188,13 +197,11 @@ class ExcelService:
                     "subject_id": subject_id,
                     "component_scores": {
                         **{
-                            code: row.get(code, row.get("tugas", "") if active_component_codes and code == active_component_codes[0] else "")
-                            for code in active_component_codes
+                            code: row.get(header, "")
+                            for header, code in header_to_code.items()
                         },
-                        **({"uts": row.get("uts", 0) or 0} if any(item["component_code"] == "uts" for item in active_layout) else {}),
-                        **({"uas": row.get("uas", 0) or 0} if any(item["component_code"] == "uas" for item in active_layout) else {}),
                     },
-                    "extra_score": row.get("tambahan", 0) or 0,
+                    "extra_score": 0,
                 }
             )
             imported += 1
@@ -256,11 +263,9 @@ class ExcelService:
                 for component in component_layout:
                     item[component["component_name"]] = row["component_scores"].get(component["component_code"], 0.0)
                 item["Rata-rata Harian"] = row["daily_score"]
-                item["Tambahan"] = row["extra_score"]
                 item["Nilai Akhir"] = row["final_result"]
                 item["Predikat"] = row["predicate"]
                 item["Status"] = row["status"]
-                item["Ranking"] = row["rank_number"]
                 export_rows.append(item)
             frame = pd.DataFrame(export_rows)
         else:
@@ -277,11 +282,9 @@ class ExcelService:
                     "task_score": "Rata-rata Harian",
                     "mid_score": "UTS",
                     "final_score": "UAS",
-                    "extra_score": "Tambahan",
                     "final_result": "Nilai Akhir",
                     "predicate": "Predikat",
                     "status": "Status",
-                    "rank_number": "Ranking",
                 }
             )
         frame.insert(0, "No", range(1, len(frame) + 1))
@@ -355,7 +358,7 @@ class ExcelService:
                 ("Nama", student["full_name"], "Kelas", student["class_name"]),
                 ("NIS", student["nis"], "Semester", student["semester"]),
                 ("NISN", student["nisn"], "Tahun Pelajaran", student["academic_year"]),
-                ("Nama Orang Tua", student["parent_name"], "Wali Kelas", student["teacher_name"]),
+                ("Nama Orang Tua", student["parent_name"], "Guru", student["teacher_name"]),
             ]
             start_row = 5
             for index, (left_label, left_value, right_label, right_value) in enumerate(info_rows, start=start_row):
@@ -413,7 +416,7 @@ class ExcelService:
             ws["A" + str(sign_row)] = "Mengetahui,"
             ws["A" + str(sign_row + 1)] = "Kepala Sekolah,"
             ws["C" + str(sign_row)] = ""
-            ws["D" + str(sign_row)] = "Wali Kelas,"
+            ws["D" + str(sign_row)] = "Guru,"
             ws["A" + str(sign_row + 4)] = ""
             ws["D" + str(sign_row + 4)] = ""
 

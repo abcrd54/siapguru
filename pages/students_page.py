@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QTableWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QTableWidget, QVBoxLayout, QWidget
 
 from ui.dialogs import FormDialog, combo_box, confirm, error, info, line_edit, text_edit
 from ui.widgets import ActionButton, PageHeader, add_row_actions, fill_table, set_table_headers
@@ -11,17 +11,14 @@ class StudentsPage(QWidget):
         super().__init__()
         self.services = services
         self.rows: list[dict] = []
-        self.app_mode = self.services["app_mode"]
 
         layout = QVBoxLayout(self)
-        subtitle = (
-            "Tambahkan siswa satu per satu atau impor dari template Excel."
-            if self.app_mode == "wali_kelas"
-            else "Kelola data siswa per kelas untuk kebutuhan input nilai."
-        )
+        subtitle = "Tambahkan siswa satu per satu atau impor dari template Excel."
         layout.addWidget(PageHeader("Data Siswa", subtitle))
 
-        primary_controls = QHBoxLayout()
+        top_controls = QGridLayout()
+        top_controls.setHorizontalSpacing(16)
+        top_controls.setVerticalSpacing(10)
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Cari nama siswa...")
         self.search_input.textChanged.connect(self.refresh)
@@ -37,28 +34,38 @@ class StudentsPage(QWidget):
         add_button.clicked.connect(self.open_add_dialog)
         self.class_filter.setMinimumWidth(280)
         self.class_filter.setMaximumWidth(360)
+        self.search_input.setMinimumWidth(360)
+        self.search_input.setMaximumWidth(520)
         import_button.setMaximumWidth(220)
         add_button.setMaximumWidth(180)
         template_button.setMaximumWidth(180)
         export_button.setMaximumWidth(180)
-        primary_controls.addWidget(self.class_filter)
-        primary_controls.addStretch()
-        primary_controls.addWidget(import_button)
-        primary_controls.addWidget(add_button)
-        layout.addLayout(primary_controls)
 
-        secondary_controls = QHBoxLayout()
-        secondary_controls.addWidget(self.search_input)
-        secondary_controls.addStretch()
-        secondary_controls.addWidget(template_button)
-        secondary_controls.addWidget(export_button)
-        layout.addLayout(secondary_controls)
+        right_row_one = QHBoxLayout()
+        right_row_one.setSpacing(10)
+        right_row_one.addStretch()
+        right_row_one.addWidget(import_button)
+        right_row_one.addWidget(add_button)
+
+        right_row_two = QHBoxLayout()
+        right_row_two.setSpacing(10)
+        right_row_two.addStretch()
+        right_row_two.addWidget(template_button)
+        right_row_two.addWidget(export_button)
+
+        top_controls.addWidget(self.class_filter, 0, 0)
+        top_controls.addLayout(right_row_one, 0, 1)
+        top_controls.addWidget(self.search_input, 1, 0)
+        top_controls.addLayout(right_row_two, 1, 1)
+        top_controls.setColumnStretch(0, 1)
+        top_controls.setColumnStretch(1, 0)
+        layout.addLayout(top_controls)
 
         self.table = QTableWidget()
         set_table_headers(
             self.table,
             ["No", "Nama Siswa", "NIS", "NISN", "Kelas", "Gender", "No. WA Ortu", "Aksi"],
-            action_col_width=92,
+            action_col_width=138,
         )
         layout.addWidget(self.table)
         self.helper_label = QLabel()
@@ -82,7 +89,7 @@ class StudentsPage(QWidget):
 
     def refresh(self) -> None:
         class_id = self.class_filter.currentData()
-        if self.app_mode == "guru_mapel" and class_id:
+        if class_id:
             self.services["settings"].update_active_context(default_class_id=class_id)
         self.rows = self.services["students"].search_students(self.search_input.text().strip(), class_id)
         fill_table(

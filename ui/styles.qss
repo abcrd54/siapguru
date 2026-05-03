@@ -181,6 +181,23 @@ QPushButton[iconOnly="true"]:hover {
     border: 1px solid rgba(20, 33, 61, 0.08);
 }
 
+#SheetToggleButton {
+    background: #F7FAFF;
+    border: 1px solid #D6E5FF;
+    color: #23406A;
+    border-radius: 10px;
+    padding: 8px 14px;
+}
+
+#SheetToggleButton:hover {
+    background: #EEF5FF;
+}
+
+#SheetToggleButton:checked {
+    background: #EAF2FF;
+    border: 1px solid #99B9F7;
+}
+
 QLineEdit, QComboBox, QTextEdit {
     background: white;
     border: 1px solid #D7E1EE;
@@ -213,11 +230,52 @@ QTableWidget {
 QTableWidget::item {
     padding: 8px 10px;
     border-bottom: 1px solid #EEF3F8;
+    border-right: 1px solid #EEF3F8;
 }
 
 QTableWidget::item:selected {
     background: #E7F0FF;
     color: #14213D;
+}
+
+#WorkspaceList {
+    background: white;
+    border: 1px solid #E3EAF4;
+    border-radius: 16px;
+    padding: 8px;
+}
+
+#WorkspaceList::item {
+    padding: 14px 16px;
+    margin: 4px 0;
+    border-radius: 12px;
+}
+
+#WorkspaceList::item:selected {
+    background: #EAF2FF;
+    color: #17356B;
+}
+
+#WorkspaceList::item:hover {
+    background: #F5F9FF;
+}
+
+QCheckBox {
+    spacing: 10px;
+    color: #233654;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+    border: 1px solid #BDD0EA;
+    background: white;
+}
+
+QCheckBox::indicator:checked {
+    background: #2463EB;
+    border: 1px solid #2463EB;
 }
 
 QHeaderView::section {

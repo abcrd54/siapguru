@@ -17,7 +17,7 @@ class BackupService:
 
     def backup_database(self) -> str:
         self.backup_dir.mkdir(parents=True, exist_ok=True)
-        target = self.backup_dir / f"backup_siapguru_{datetime.now():%Y%m%d_%H%M}.db"
+        target = self.backup_dir / f"backup_siapguru_{datetime.now():%Y%m%d_%H%M%S}.db"
         self.database.get_connection().commit()
         shutil.copy2(self.database.get_db_path(), target)
         self.database.execute(
@@ -26,7 +26,8 @@ class BackupService:
         )
         return str(target)
 
-    def validate_backup_file(self, file_path: str) -> None:
+    @staticmethod
+    def validate_backup_file(file_path: str) -> None:
         path = Path(file_path)
         if path.suffix.lower() != ".db":
             raise ValueError("File backup tidak valid atau rusak.")
@@ -51,6 +52,32 @@ class BackupService:
         }
         if not required.issubset(tables):
             raise ValueError("File backup tidak valid atau rusak.")
+
+    @staticmethod
+    def read_backup_metadata(file_path: str) -> dict:
+        BackupService.validate_backup_file(file_path)
+        path = Path(file_path)
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        try:
+            settings = conn.execute("SELECT * FROM settings ORDER BY id ASC LIMIT 1").fetchone()
+        finally:
+            conn.close()
+        settings_dict = dict(settings) if settings else {}
+        academic_year = str(settings_dict.get("academic_year", "") or "").strip()
+        semester = str(settings_dict.get("semester", "Ganjil") or "Ganjil")
+        workspace_label = f"{academic_year} - {semester}" if academic_year else semester
+        backup_date = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        return {
+            "file_path": str(path),
+            "file_name": path.name,
+            "workspace_label": workspace_label,
+            "academic_year": academic_year,
+            "semester": semester,
+            "school_name": str(settings_dict.get("school_name", "") or "").strip(),
+            "teacher_name": str(settings_dict.get("teacher_name", "") or "").strip(),
+            "backup_date": backup_date,
+        }
 
     def restore_database(self, file_path: str) -> None:
         self.validate_backup_file(file_path)

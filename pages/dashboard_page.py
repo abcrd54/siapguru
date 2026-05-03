@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QTableWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from ui.widgets import ActionButton, CardWidget, PageHeader, fill_table, set_table_headers
+from ui.widgets import ActionButton, CardWidget, PageHeader
 
 
 class DashboardPage(QWidget):
@@ -12,141 +12,94 @@ class DashboardPage(QWidget):
     def __init__(self, services: dict) -> None:
         super().__init__()
         self.services = services
-        self.app_mode = self.services["app_mode"]
         layout = QVBoxLayout(self)
-        subtitle = (
-            "Ringkasan singkat untuk membantu wali kelas menyelesaikan pekerjaan utama lebih cepat."
-            if self.app_mode == "wali_kelas"
-            else "Ringkasan data akademik Anda"
-        )
+        subtitle = "Pantau workspace aktif, cek progres kelas dan mapel, lalu lanjutkan ke input nilai atau pembuatan raport."
         layout.addWidget(PageHeader("Beranda", subtitle))
 
+        self.context_label = QLabel()
+        self.context_label.setObjectName("DialogHint")
+        self.context_label.setWordWrap(True)
+        layout.addWidget(self.context_label)
+
         self.card_grid = QGridLayout()
+        self.card_grid.setHorizontalSpacing(14)
+        self.card_grid.setVerticalSpacing(14)
         layout.addLayout(self.card_grid)
 
+        self.quick_title = QLabel("Aksi Cepat")
+        self.quick_title.setObjectName("CardTitle")
+        layout.addWidget(self.quick_title)
+
         self.quick_actions = QHBoxLayout()
+        self.quick_actions.setSpacing(12)
         layout.addLayout(self.quick_actions)
 
         self.empty_label = QLabel()
+        self.empty_label.setWordWrap(True)
         layout.addWidget(self.empty_label)
-
-        self.table = QTableWidget()
-        set_table_headers(self.table, ["Nama", "Kelas", "Mapel", "Nilai", "KKM", "Status"])
-        layout.addWidget(self.table)
         self.refresh()
 
     def refresh(self) -> None:
-        app_mode = self.app_mode
         context = self.services["settings"].get_active_context()
         active_class_id = context.get("default_class_id")
-        active_subject_id = context.get("default_subject_id") if app_mode == "guru_mapel" else None
+        current_workspace = self.services.get("current_workspace") or {}
+        workspace_label = current_workspace.get("label", "Workspace belum dipilih")
+        active_class_name = "-"
+        if active_class_id:
+            active_class = next(
+                (row for row in self.services["classes"].get_classes() if row["id"] == active_class_id),
+                None,
+            )
+            if active_class:
+                active_class_name = active_class["class_name"]
         while self.quick_actions.count():
             item = self.quick_actions.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        if app_mode == "wali_kelas":
-            targets = {
-                "Buka Data Siswa": "Data Siswa",
-                "Data Kelas": "Data Kelas",
-                "Buat Raport": "Buat Raport",
-                "Unduh Laporan": "Unduh Laporan",
-            }
-            primary = {"Buka Data Siswa", "Unduh Laporan"}
-        else:
-            targets = {
-                "Input Nilai": "Nilai",
-                "Cek Ketuntasan": "Smart Ketuntasan",
-                "Buat Raport": "Buat Raport",
-                "Export Excel": "Unduh Laporan",
-            }
-            primary = {"Input Nilai", "Export Excel"}
+        targets = {
+            "Input Nilai": "Nilai",
+            "Atur Mapel": "Mata Pelajaran",
+            "Data Kelas": "Data Kelas",
+            "Buat Raport": "Buat Raport",
+            "Unduh Laporan": "Unduh Laporan",
+        }
+        primary = {"Input Nilai", "Unduh Laporan"}
         for label, target in targets.items():
             button = ActionButton(label, primary=label in primary)
+            button.setMaximumWidth(168)
             button.clicked.connect(lambda _, page=target: self.navigate_requested.emit(page))
             self.quick_actions.addWidget(button)
         self.quick_actions.addStretch()
 
         student_count = len(self.services["students"].search_students(class_id=active_class_id))
+        total_students = len(self.services["students"].search_students())
         class_count = len(self.services["classes"].get_classes())
         subject_count = len(self.services["subjects"].get_subjects())
-        incomplete_query = """
-            SELECT COUNT(*) AS total
-            FROM students s
-            LEFT JOIN grades g ON g.student_id = s.id
-            WHERE g.id IS NULL
-        """
-        incomplete_params: list[object] = []
-        if active_class_id:
-            incomplete_query += " AND s.class_id = ?"
-            incomplete_params.append(active_class_id)
-        incomplete = self.services["database"].fetch_one(incomplete_query, incomplete_params)
         last_backup = self.services["backup"].get_backup_history()
         report_ready_count = 0
         if active_class_id:
             report_ready_count = len(self.services["reports"].get_report_book_data(active_class_id))
-        below_query = """
-            SELECT s.full_name, c.class_name, sub.subject_name, g.final_result, g.status, sub.kkm
-            FROM grades g
-            JOIN students s ON s.id = g.student_id
-            JOIN classes c ON c.id = s.class_id
-            JOIN subjects sub ON sub.id = g.subject_id
-            WHERE g.status = 'Belum Tuntas'
-        """
-        below_params: list[object] = []
-        if active_class_id:
-            below_query += " AND s.class_id = ?"
-            below_params.append(active_class_id)
-        if active_subject_id:
-            below_query += " AND g.subject_id = ?"
-            below_params.append(active_subject_id)
-        below_query += " ORDER BY g.final_result ASC LIMIT 10"
-        below = self.services["database"].fetch_all(below_query, below_params)
+        self.context_label.setText(
+            f"Workspace aktif: {workspace_label}. "
+            f"Kelas fokus saat ini: {active_class_name}. "
+            "Gunakan workspace ini untuk mengelola nilai akhir raport pada periode akademik yang sedang berjalan."
+        )
         while self.card_grid.count():
             item = self.card_grid.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        if app_mode == "wali_kelas":
-            cards = [
-                CardWidget("Total Siswa", str(student_count)),
-                CardWidget("Total Kelas", str(class_count)),
-                CardWidget("Siap Dibuat Raport", str(report_ready_count), "#2563EB"),
-                CardWidget("Backup Terakhir", last_backup[0]["backup_date"] if last_backup else "-", "#16A34A"),
-            ]
-            self.empty_label.setText(
-                "Fokus utama wali kelas: cek data siswa, lengkapi nilai, lalu buat file raport."
-                if student_count == 0 else
-                "Gunakan menu di atas untuk cek data kelas, pastikan nilai lengkap, lalu buat file raport."
-            )
-            self.table.setVisible(False)
-        else:
-            cards = [
-                CardWidget("Total Siswa", str(student_count)),
-                CardWidget("Total Kelas", str(class_count)),
-                CardWidget("Backup Terakhir", last_backup[0]["backup_date"] if last_backup else "-", "#16A34A"),
-                CardWidget("Total Mapel", str(subject_count)),
-                CardWidget("Belum Tuntas", str(len(below)), "#DC2626"),
-                CardWidget("Nilai Belum Lengkap", str(incomplete["total"] if incomplete else 0), "#F59E0B"),
-            ]
-            self.empty_label.setText(
-                "Mode Guru Mapel: pilih kelas dan mapel aktif, lalu lanjut ke input nilai, ketuntasan, dan deskripsi."
-                if student_count == 0 else
-                "Mode Guru Mapel aktif. Dashboard ini mengikuti kelas dan mapel aktif yang sedang Anda kerjakan."
-            )
-            self.table.setVisible(True)
+        cards = [
+            CardWidget("Siswa Kelas Fokus", str(student_count)),
+            CardWidget("Total Siswa Workspace", str(total_students)),
+            CardWidget("Total Kelas", str(class_count)),
+            CardWidget("Total Mapel", str(subject_count)),
+            CardWidget("Siap Dibuat Raport", str(report_ready_count), "#2563EB"),
+            CardWidget("Backup Terakhir", last_backup[0]["backup_date"] if last_backup else "-", "#16A34A"),
+        ]
+        self.empty_label.setText(
+            "Mulai dari menyiapkan kelas, mapel, dan siswa pada workspace ini, lalu lanjutkan ke input nilai akhir raport."
+            if total_students == 0 else
+            "Beranda ini dipakai untuk memantau workspace aktif dan mempercepat perpindahan ke langkah kerja utama guru."
+        )
         for index, card in enumerate(cards):
             self.card_grid.addWidget(card, index // 3, index % 3)
-        if self.table.isVisible():
-            fill_table(
-                self.table,
-                [
-                    [
-                        row["full_name"],
-                        row["class_name"],
-                        row["subject_name"],
-                        row["final_result"],
-                        row["kkm"] if row["kkm"] is not None else self.services["settings"].get_kkm(),
-                        row["status"],
-                    ]
-                    for row in below
-                ],
-            )

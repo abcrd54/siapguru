@@ -8,6 +8,8 @@ env/
 
 build/
 dist/
+build_release/
+dist_release/
 installer_output/
 exports/
 backups/

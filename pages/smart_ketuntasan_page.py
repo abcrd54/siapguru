@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QHeaderView,
@@ -14,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.dialogs import confirm, error, info
-from ui.widgets import ActionButton, PageHeader, add_row_actions, badge_item, set_table_headers, table_item
+from ui.widgets import ActionButton, CardWidget, PageHeader, add_row_actions, badge_item, set_table_headers, table_item
 
 
 class SmartKetuntasanPage(QWidget):
@@ -24,17 +25,15 @@ class SmartKetuntasanPage(QWidget):
         self.rows: list[dict] = []
         self.component_layout: list[dict] = []
         self.component_column_map: dict[str, int] = {}
-        self.app_mode = self.services["app_mode"]
 
         layout = QVBoxLayout(self)
-        subtitle = (
-            "Ambil nilai akhir semua siswa pada mapel ini, lalu sesuaikan secara adil ke target rentang nilai raport yang Anda tentukan."
-        )
-        layout.addWidget(PageHeader("Smart Ketuntasan", subtitle))
+        subtitle = "Simulasikan dan terapkan penyesuaian nilai akhir raport pada kelas dan mapel yang Anda ampu tanpa mengubah urutan pencapaian siswa."
+        layout.addWidget(PageHeader("Katrol Nilai", subtitle))
 
         self.step_label = QLabel(
-            "Pilih kelas dan mapel, lalu tentukan target nilai raport terendah dan tertinggi untuk hasil akhir semua siswa."
+            "1. Pilih kelas dan mapel. 2. Tentukan rentang nilai akhir yang diinginkan. 3. Periksa hasil simulasi, lalu proses jika sudah sesuai."
         )
+        self.step_label.setObjectName("DialogHint")
         self.step_label.setWordWrap(True)
         layout.addWidget(self.step_label)
 
@@ -42,23 +41,22 @@ class SmartKetuntasanPage(QWidget):
         self.subject_filter = QComboBox()
         self.target_min_score = QDoubleSpinBox()
         self.target_max_score = QDoubleSpinBox()
-        for field, value, suffix, special in (
-            (self.target_min_score, 75, " nilai", "Mulai 0"),
-            (self.target_max_score, 96, " nilai", "Sampai 0"),
+        for field, value in (
+            (self.target_min_score, 75),
+            (self.target_max_score, 96),
         ):
             field.setRange(0, 100)
             field.setDecimals(0)
             field.setValue(value)
-            field.setSuffix(suffix)
-            field.setSpecialValueText(special)
+            field.setButtonSymbols(QDoubleSpinBox.NoButtons)
+            field.setAlignment(Qt.AlignCenter)
+            field.setMinimumWidth(120)
+            field.setMaximumWidth(140)
 
-        apply_button = ActionButton("Proses Otomatis", primary=True)
-        apply_button.setMaximumWidth(190)
         self.class_filter.currentIndexChanged.connect(self.refresh)
         self.subject_filter.currentIndexChanged.connect(self.refresh)
         self.target_min_score.valueChanged.connect(self.refresh)
         self.target_max_score.valueChanged.connect(self.refresh)
-        apply_button.clicked.connect(self.apply_bulk)
 
         form_card = QWidget()
         form = QFormLayout(form_card)
@@ -67,17 +65,47 @@ class SmartKetuntasanPage(QWidget):
         form.setVerticalSpacing(12)
         self.class_filter.setMinimumWidth(240)
         self.subject_filter.setMinimumWidth(240)
-        self.target_min_score.setMinimumWidth(180)
-        self.target_max_score.setMinimumWidth(180)
         form.addRow("1. Pilih Kelas", self.class_filter)
         form.addRow("2. Pilih Mapel", self.subject_filter)
-        form.addRow("3. Target Nilai Terendah", self.target_min_score)
-        form.addRow("4. Target Nilai Tertinggi", self.target_max_score)
+
+        target_row = QWidget()
+        target_layout = QHBoxLayout(target_row)
+        target_layout.setContentsMargins(0, 0, 0, 0)
+        target_layout.setSpacing(14)
+
+        min_wrap = QVBoxLayout()
+        min_label = QLabel("Nilai Terendah")
+        min_label.setObjectName("PageSubtitle")
+        min_wrap.addWidget(min_label)
+        min_wrap.addWidget(self.target_min_score)
+
+        max_wrap = QVBoxLayout()
+        max_label = QLabel("Nilai Tertinggi")
+        max_label.setObjectName("PageSubtitle")
+        max_wrap.addWidget(max_label)
+        max_wrap.addWidget(self.target_max_score)
+
+        dash_label = QLabel("sampai")
+        dash_label.setObjectName("PageSubtitle")
+        dash_label.setAlignment(Qt.AlignCenter)
+
+        target_layout.addLayout(min_wrap)
+        target_layout.addWidget(dash_label)
+        target_layout.addLayout(max_wrap)
+        target_layout.addStretch()
+
+        form.addRow("3. Rentang Nilai Akhir", target_row)
         layout.addWidget(form_card)
+
+        self.summary_grid = QGridLayout()
+        layout.addLayout(self.summary_grid)
 
         actions = QHBoxLayout()
         actions.addStretch()
-        actions.addWidget(apply_button)
+        self.apply_button = ActionButton("Proses Penyesuaian Nilai", primary=True)
+        self.apply_button.setMaximumWidth(230)
+        self.apply_button.clicked.connect(self.apply_bulk)
+        actions.addWidget(self.apply_button)
         layout.addLayout(actions)
 
         self.table = QTableWidget()
@@ -126,17 +154,16 @@ class SmartKetuntasanPage(QWidget):
             "Nama",
             "Kelas",
             *component_headers,
-            "Tambahan",
-            "Nilai Awal",
+            "Nilai Akhir Sebelum",
             "KKM",
-            "Nilai Baru",
+            "Nilai Akhir Sesudah",
             "Status",
             "Aksi",
         ]
 
     def _setup_table(self) -> None:
         headers = self._build_headers()
-        set_table_headers(self.table, headers, action_col_width=108, default_row_height=48)
+        set_table_headers(self.table, headers, action_col_width=136, default_row_height=48)
         header = self.table.horizontalHeader()
         self.component_column_map = {}
         header.setSectionResizeMode(0, QHeaderView.Stretch)
@@ -147,11 +174,10 @@ class SmartKetuntasanPage(QWidget):
             self.component_column_map[component["component_code"]] = index
             header.setSectionResizeMode(index, QHeaderView.Fixed)
             self.table.setColumnWidth(index, 78)
-        self.table.setColumnWidth(start + len(self.component_layout), 84)
-        self.table.setColumnWidth(start + len(self.component_layout) + 1, 94)
-        self.table.setColumnWidth(start + len(self.component_layout) + 2, 70)
-        self.table.setColumnWidth(start + len(self.component_layout) + 3, 94)
-        status_col = start + len(self.component_layout) + 4
+        self.table.setColumnWidth(start + len(self.component_layout), 122)
+        self.table.setColumnWidth(start + len(self.component_layout) + 1, 70)
+        self.table.setColumnWidth(start + len(self.component_layout) + 2, 122)
+        status_col = start + len(self.component_layout) + 3
         header.setSectionResizeMode(status_col, QHeaderView.Stretch)
 
     def refresh(self) -> None:
@@ -159,16 +185,17 @@ class SmartKetuntasanPage(QWidget):
         subject_id = self.subject_filter.currentData()
         self.table.setRowCount(0)
         if not class_id or not subject_id:
-            self.helper_label.setText("Pilih kelas dan mapel untuk melihat preview Smart Ketuntasan.")
+            self._render_summary([])
+            self.apply_button.setEnabled(False)
+            self.helper_label.setText("Pilih kelas dan mapel untuk melihat simulasi penyesuaian nilai akhir.")
             return
-        self.services["settings"].update_active_context(
-            default_class_id=class_id,
-            default_subject_id=subject_id,
-        )
+        self.services["settings"].update_active_context(default_class_id=class_id, default_subject_id=subject_id)
         target_min = float(self.target_min_score.value())
         target_max = float(self.target_max_score.value())
         if target_min > target_max:
-            self.helper_label.setText("Target nilai terendah tidak boleh lebih besar dari target nilai tertinggi.")
+            self._render_summary([])
+            self.apply_button.setEnabled(False)
+            self.helper_label.setText("Nilai akhir terendah tidak boleh lebih besar dari nilai akhir tertinggi.")
             return
         self.component_layout = self.services["grades"].get_component_layout(subject_id)
         self.rows = self.services["remedial"].get_adjustment_candidates(
@@ -177,32 +204,35 @@ class SmartKetuntasanPage(QWidget):
             target_min_score=target_min,
             target_max_score=target_max,
         )
+        self._render_summary(self.rows)
         self._setup_table()
         self.table.setRowCount(len(self.rows))
         if not self.rows:
-            self.helper_label.setText("Belum ada data siswa atau nilai pada kelas dan mapel ini.")
+            self.apply_button.setEnabled(False)
+            self.helper_label.setText("Belum ada data siswa atau nilai akhir pada kelas dan mapel ini.")
             return
+
+        self.apply_button.setEnabled(True)
         for row_index, row in enumerate(self.rows):
             self.table.setItem(row_index, 0, table_item(row["full_name"], alignment=Qt.AlignLeft))
             self.table.setItem(row_index, 1, table_item(row["class_name"]))
             for component in self.component_layout:
                 column = self.component_column_map[component["component_code"]]
                 score = row["component_scores"].get(component["component_code"], 0.0)
-                self.table.setItem(row_index, column, table_item(round(float(score), 2)))
+                self.table.setItem(row_index, column, table_item(round(float(score), 0)))
             summary_start = 2 + len(self.component_layout)
-            self.table.setItem(row_index, summary_start, table_item(row["extra_score"]))
             self.table.setItem(
                 row_index,
-                summary_start + 1,
-                table_item(row["original_score"], foreground="#9A3412", background="#FFF1E7"),
+                summary_start,
+                table_item(row["before_final_score"], foreground="#9A3412", background="#FFF1E7"),
             )
-            self.table.setItem(row_index, summary_start + 2, table_item(row["kkm"]))
+            self.table.setItem(row_index, summary_start + 1, table_item(row["kkm"]))
             self.table.setItem(
                 row_index,
-                summary_start + 3,
-                table_item(row["adjusted_score"], foreground="#1D4ED8", background="#E8F1FF"),
+                summary_start + 2,
+                table_item(row["after_final_score"], foreground="#1D4ED8", background="#E8F1FF"),
             )
-            self.table.setItem(row_index, summary_start + 4, badge_item(row["remedial_status"]))
+            self.table.setItem(row_index, summary_start + 3, badge_item(row["remedial_status"]))
             add_row_actions(
                 self.table,
                 row_index,
@@ -210,10 +240,7 @@ class SmartKetuntasanPage(QWidget):
             )
         self.table.resizeRowsToContents()
         self.helper_label.setText(
-            (
-                f"Data ini akan disesuaikan ke target rentang nilai {target_min:.0f}-{target_max:.0f}. "
-                "Urutan nilai siswa tetap dipertahankan, lalu hasil akhirnya disebar secara adil ke rentang target itu."
-            )
+            "Simulasi ini memakai nilai akhir raport yang sudah dihitung dari bobot mapel aktif. Nilai sebelum dan sesudah penyesuaian ditampilkan agar perubahan mudah dicek."
         )
 
     def apply_one(self, row: dict) -> None:
@@ -221,7 +248,7 @@ class SmartKetuntasanPage(QWidget):
             self.services["remedial"].apply_recommendation(
                 row["grade_id"],
                 float(row["adjusted_score"]),
-                f"Smart Ketuntasan rentang {row['target_min_score']:.0f}-{row['target_max_score']:.0f}",
+                f"Penyesuaian nilai akhir rentang {row['target_min_score']:.0f}-{row['target_max_score']:.0f}",
                 mode="minimal",
                 category="Auto Ketuntasan",
                 status_label=row["remedial_status"],
@@ -240,7 +267,7 @@ class SmartKetuntasanPage(QWidget):
         target_min = float(self.target_min_score.value())
         target_max = float(self.target_max_score.value())
         if target_min > target_max:
-            error(self, "Target nilai terendah tidak boleh lebih besar dari target nilai tertinggi.")
+            error(self, "Nilai akhir terendah tidak boleh lebih besar dari nilai akhir tertinggi.")
             return
         if not self.rows:
             error(self, "Belum ada data nilai yang bisa diproses.")
@@ -248,7 +275,7 @@ class SmartKetuntasanPage(QWidget):
         try:
             if not confirm(
                 self,
-                f"Proses otomatis semua siswa yang tampil ke target rentang nilai {target_min:.0f}-{target_max:.0f}?",
+                f"Proses penyesuaian nilai akhir semua siswa ke rentang {target_min:.0f}-{target_max:.0f}?",
             ):
                 return
             count = self.services["remedial"].apply_bulk_adjustments(
@@ -265,4 +292,27 @@ class SmartKetuntasanPage(QWidget):
     def reset_one(self, row: dict) -> None:
         self.services["remedial"].reset_remedial(row["grade_id"])
         self.refresh()
-        info(self, "Nilai hasil Smart Ketuntasan direset.")
+        info(self, "Nilai hasil penyesuaian berhasil direset.")
+
+    def _render_summary(self, rows: list[dict]) -> None:
+        while self.summary_grid.count():
+            item = self.summary_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        if not rows:
+            cards = [
+                CardWidget("Jumlah Siswa", "0"),
+                CardWidget("Nilai Terendah", "-"),
+                CardWidget("Nilai Tertinggi", "-"),
+                CardWidget("Target Baru", f"{self.target_min_score.value():.0f}-{self.target_max_score.value():.0f}", "#2563EB"),
+            ]
+        else:
+            current_scores = [float(row["original_score"]) for row in rows]
+            cards = [
+                CardWidget("Jumlah Siswa", str(len(rows))),
+                CardWidget("Nilai Awal Terendah", f"{min(current_scores):.0f}"),
+                CardWidget("Nilai Awal Tertinggi", f"{max(current_scores):.0f}"),
+                CardWidget("Target Baru", f"{self.target_min_score.value():.0f}-{self.target_max_score.value():.0f}", "#2563EB"),
+            ]
+        for index, card in enumerate(cards):
+            self.summary_grid.addWidget(card, 0, index)

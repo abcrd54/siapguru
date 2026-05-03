@@ -1,35 +1,37 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import (
-    collect_dynamic_libs,
-    collect_submodules,
-    copy_metadata,
-)
+import os
+
+from PyInstaller.utils.hooks import collect_dynamic_libs, collect_submodules, copy_metadata
 
 
-hiddenimports = (
-    collect_submodules('firebase_admin')
-    + collect_submodules('google.cloud.firestore')
-)
+APP_NAME = os.environ.get("SIAPGURU_BUILD_NAME", "SiapGuru")
+ENTRY_SCRIPT = "main.py"
+APP_ICON = "assets\\icon.ico"
+APP_DATAS = [
+    ("ui/styles.qss", "ui"),
+    ("assets/icon.ico", "assets"),
+    ("assets/logo-siapguru.png", "assets"),
+]
 
-binaries = collect_dynamic_libs('numpy')
-
-datas = (
-    [('ui/styles.qss', 'ui'), ('assets/icon.ico', 'assets'), ('assets/logo-siapguru.png', 'assets'), ('servicekey-py.json', '.')]
-    + copy_metadata('numpy')
-    + copy_metadata('pandas')
-    + copy_metadata('openpyxl')
-    + copy_metadata('firebase-admin')
-    + copy_metadata('google-cloud-firestore')
+HIDDEN_IMPORTS = collect_submodules("firebase_admin") + collect_submodules("google.cloud.firestore")
+BINARIES = collect_dynamic_libs("numpy")
+DATAS = (
+    APP_DATAS
+    + copy_metadata("numpy")
+    + copy_metadata("pandas")
+    + copy_metadata("openpyxl")
+    + copy_metadata("firebase-admin")
+    + copy_metadata("google-cloud-firestore")
 )
 
 
 a = Analysis(
-    ['main.py'],
+    [ENTRY_SCRIPT],
     pathex=[],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
+    binaries=BINARIES,
+    datas=DATAS,
+    hiddenimports=HIDDEN_IMPORTS,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -45,7 +47,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='SiapGuru',
+    name=APP_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -58,5 +60,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets\\icon.ico'],
+    icon=[APP_ICON],
 )

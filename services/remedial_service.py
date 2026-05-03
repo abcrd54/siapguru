@@ -50,12 +50,12 @@ class RemedialService:
         if not grade_rows:
             return []
         kkm = self.grade_service.get_subject_kkm(subject_id)
-        scores = [float(row["final_result"]) for row in grade_rows]
+        scores = [self._base_final_score(row) for row in grade_rows]
         original_min = min(scores)
         original_max = max(scores)
         result = []
         for row in grade_rows:
-            original_score = float(row["final_result"])
+            original_score = self._base_final_score(row)
             adjusted_score = self._scale_score(
                 original_score,
                 original_min,
@@ -70,6 +70,8 @@ class RemedialService:
             data["adjusted_score"] = adjusted_score
             data["recommended_score"] = adjusted_score
             data["final_score"] = adjusted_score
+            data["before_final_score"] = round(original_score, 2)
+            data["after_final_score"] = adjusted_score
             data["kkm"] = kkm
             data["gap"] = round(max(0.0, float(kkm) - original_score), 2)
             data["difference"] = round(adjusted_score - original_score, 2)
@@ -79,6 +81,17 @@ class RemedialService:
             data["auto_applied"] = adjusted_score != round(original_score, 2)
             result.append(data)
         return result
+
+    def _base_final_score(self, row: dict) -> float:
+        if row.get("final_result") not in (None, ""):
+            return round(float(row.get("final_result") or 0), 2)
+        return self.grade_service.calculate_final_score(
+            float(row.get("daily_score") or 0),
+            float(row.get("mid_score") or 0),
+            float(row.get("final_score") or 0),
+            float(row.get("extra_score") or 0),
+            subject_id=int(row["subject_id"]) if row.get("subject_id") else None,
+        )
 
     def _scale_score(
         self,

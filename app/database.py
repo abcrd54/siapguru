@@ -66,6 +66,9 @@ SCHEMA = [
         subject_name TEXT NOT NULL UNIQUE,
         teacher_name TEXT,
         kkm INTEGER,
+        weight_task INTEGER DEFAULT 30,
+        weight_mid INTEGER DEFAULT 30,
+        weight_final INTEGER DEFAULT 40,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
@@ -253,6 +256,9 @@ class DatabaseService:
         required_columns = {
             "teacher_name": "TEXT",
             "kkm": "INTEGER",
+            "weight_task": "INTEGER DEFAULT 30",
+            "weight_mid": "INTEGER DEFAULT 30",
+            "weight_final": "INTEGER DEFAULT 40",
             "created_at": "TEXT DEFAULT CURRENT_TIMESTAMP",
             "updated_at": "TEXT DEFAULT CURRENT_TIMESTAMP",
         }

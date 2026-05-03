@@ -12,10 +12,10 @@ class ReportsPage(QWidget):
         super().__init__()
         self.services = services
         self.rows: list[dict] = []
-        self.app_mode = self.services["app_mode"]
+        self.subject_headers: list[str] = []
 
         layout = QVBoxLayout(self)
-        subtitle = "Pilih kelas, periksa ringkasan nilai akhir semua siswa, lalu buat file raport Excel per siswa."
+        subtitle = "Pilih kelas yang Anda ampu, cek ringkasan nilai akhir tiap siswa, lalu buat file raport Excel."
         layout.addWidget(PageHeader("Buat Raport", subtitle))
 
         controls = QHBoxLayout()
@@ -32,11 +32,7 @@ class ReportsPage(QWidget):
         layout.addLayout(controls)
 
         self.table = QTableWidget()
-        set_table_headers(
-            self.table,
-            ["Nama Siswa", "Kelas", "Jumlah Mapel", "Rata-rata Akhir", "Nilai Semua Mapel"],
-            default_row_height=64,
-        )
+        set_table_headers(self.table, ["Nama Siswa", "Kelas", "Rata-rata Akhir"], default_row_height=64)
         layout.addWidget(self.table)
         self.helper_label = QLabel()
         self.helper_label.setWordWrap(True)
@@ -64,26 +60,32 @@ class ReportsPage(QWidget):
     def refresh(self) -> None:
         class_id = self.class_filter.currentData()
         self.table.setRowCount(0)
+        self.subject_headers = []
         if not class_id:
             self.rows = []
-            self.helper_label.setText("Pilih kelas untuk melihat data raport per siswa.")
+            self.helper_label.setText("Pilih kelas untuk melihat kesiapan nilai akhir raport tiap siswa.")
             return
         self.services["settings"].update_active_context(
             default_class_id=class_id,
         )
         self.rows = self.services["reports"].get_report_book_data(class_id)
         if not self.rows:
-            self.helper_label.setText("Belum ada siswa atau nilai pada kelas ini.")
+            self.helper_label.setText("Belum ada siswa atau nilai akhir pada kelas ini.")
             return
+        self.subject_headers = self._subject_headers(self.rows)
+        set_table_headers(
+            self.table,
+            ["Nama Siswa", "Kelas", *self.subject_headers, "Rata-rata Akhir"],
+            default_row_height=64,
+        )
         fill_table(
             self.table,
             [
                 [
                     row["full_name"],
                     row["class_name"],
-                    len(row["lessons"]),
+                    *self._subject_scores(row["lessons"]),
                     self._average_score(row["lessons"]),
-                    self._lesson_summary(row["lessons"]),
                 ]
                 for row in self.rows
             ],
@@ -91,12 +93,16 @@ class ReportsPage(QWidget):
         for index, row in enumerate(self.rows):
             self.table.setItem(index, 0, table_item(row["full_name"], alignment=Qt.AlignLeft))
             self.table.setItem(index, 1, table_item(row["class_name"]))
-            self.table.setItem(index, 2, table_item(len(row["lessons"])))
-            self.table.setItem(index, 3, table_item(self._average_score(row["lessons"]), foreground="#1D4ED8", background="#E8F1FF"))
-            self.table.setItem(index, 4, table_item(self._lesson_summary(row["lessons"]), alignment=Qt.AlignLeft))
+            for offset, value in enumerate(self._subject_scores(row["lessons"]), start=2):
+                self.table.setItem(index, offset, table_item(value))
+            self.table.setItem(
+                index,
+                2 + len(self.subject_headers),
+                table_item(self._average_score(row["lessons"]), foreground="#1D4ED8", background="#E8F1FF"),
+            )
         self.table.resizeRowsToContents()
         self.helper_label.setText(
-            f"{len(self.rows)} siswa siap dibuatkan raport. Saat tombol Generate Raport ditekan, file Excel akan dibuat dengan satu sheet per siswa."
+            f"{len(self.rows)} siswa siap dibuatkan raport. Nilai akhir tiap mapel ditampilkan per kolom agar mudah dicek sebelum file raport dibuat."
         )
 
     def _average_score(self, lessons: list[dict]) -> float:
@@ -104,10 +110,18 @@ class ReportsPage(QWidget):
             return 0.0
         return round(sum(float(lesson["final_result"]) for lesson in lessons) / len(lessons), 2)
 
-    def _lesson_summary(self, lessons: list[dict]) -> str:
-        if not lessons:
-            return "-"
-        return " | ".join(f"{lesson['subject_name']}: {lesson['final_result']}" for lesson in lessons)
+    def _subject_headers(self, rows: list[dict]) -> list[str]:
+        headers: list[str] = []
+        for row in rows:
+            for lesson in row["lessons"]:
+                subject_name = str(lesson["subject_name"])
+                if subject_name not in headers:
+                    headers.append(subject_name)
+        return headers
+
+    def _subject_scores(self, lessons: list[dict]) -> list[object]:
+        score_map = {str(lesson["subject_name"]): lesson["final_result"] for lesson in lessons}
+        return [score_map.get(subject_name, "-") for subject_name in self.subject_headers]
 
     def export_report_book(self) -> None:
         class_id = self.class_filter.currentData()

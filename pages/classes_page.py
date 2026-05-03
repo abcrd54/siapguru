@@ -11,10 +11,9 @@ class ClassesPage(QWidget):
         super().__init__()
         self.services = services
         self.rows: list[dict] = []
-        self.app_mode = self.services["app_mode"]
 
         layout = QVBoxLayout(self)
-        subtitle = "Kelola data kelas yang digunakan di workspace wali kelas." if self.app_mode == "wali_kelas" else "Siapkan master kelas sebelum input siswa dan nilai."
+        subtitle = "Kelola data kelas yang digunakan sebelum input siswa dan nilai."
         layout.addWidget(PageHeader("Data Kelas", subtitle))
 
         controls = QHBoxLayout()
@@ -29,7 +28,7 @@ class ClassesPage(QWidget):
         layout.addLayout(controls)
 
         self.table = QTableWidget()
-        set_table_headers(self.table, ["No", "Nama Kelas", "Wali Kelas", "Jumlah Siswa", "Aksi"], action_col_width=92)
+        set_table_headers(self.table, ["No", "Nama Kelas", "Guru Kelas", "Jumlah Siswa", "Aksi"], action_col_width=128)
         layout.addWidget(self.table)
         self.helper_label = QLabel()
         layout.addWidget(self.helper_label)
@@ -43,7 +42,7 @@ class ClassesPage(QWidget):
         )
         self.helper_label.setText(
             "Belum ada kelas. Tambahkan kelas terlebih dahulu." if not self.rows
-            else "Lengkapi wali kelas untuk kelas yang masih kosong agar data lebih rapi."
+            else "Lengkapi guru kelas untuk kelas yang masih kosong agar data lebih rapi."
         )
         for index, row in enumerate(self.rows):
             add_row_actions(
@@ -57,7 +56,7 @@ class ClassesPage(QWidget):
         name = line_edit()
         teacher = line_edit()
         dialog.insert_field("Nama Kelas *", name)
-        dialog.insert_field("Wali Kelas", teacher)
+        dialog.insert_field("Guru Kelas", teacher)
         if dialog.exec():
             try:
                 self.services["classes"].add_class(name.text(), teacher.text())
@@ -71,7 +70,7 @@ class ClassesPage(QWidget):
         name = line_edit(row["class_name"])
         teacher = line_edit(row["homeroom_teacher"] or "")
         dialog.insert_field("Nama Kelas *", name)
-        dialog.insert_field("Wali Kelas", teacher)
+        dialog.insert_field("Guru Kelas", teacher)
         if dialog.exec():
             try:
                 self.services["classes"].update_class(row["id"], name.text(), teacher.text())

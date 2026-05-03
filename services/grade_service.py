@@ -19,34 +19,39 @@ class GradeService:
                 return int(row["kkm"])
         return self.settings_service.get_kkm()
 
+    def get_subject_weights(self, subject_id: int | None) -> tuple[int, int, int]:
+        settings = self.settings_service.get_settings()
+        fallback = (
+            int(settings.get("weight_task", 30)),
+            int(settings.get("weight_mid", 30)),
+            int(settings.get("weight_final", 40)),
+        )
+        if not subject_id:
+            return fallback
+        row = self.database.fetch_one(
+            "SELECT weight_task, weight_mid, weight_final FROM subjects WHERE id = ?",
+            (subject_id,),
+        )
+        if not row:
+            return fallback
+        return (
+            int(row["weight_task"] if row["weight_task"] is not None else fallback[0]),
+            int(row["weight_mid"] if row["weight_mid"] is not None else fallback[1]),
+            int(row["weight_final"] if row["weight_final"] is not None else fallback[2]),
+        )
+
     def get_component_blueprint(self, scheme: dict | None = None) -> list[dict]:
         scheme = scheme or self.settings_service.get_assessment_scheme()
         blueprints: list[dict] = []
         order_no = 1
-        component_groups = (
-            ("harian", "Harian", int(scheme["daily_component_count"]), bool(scheme["use_daily_components"])),
-            ("pr", "PR", int(scheme["homework_component_count"]), bool(scheme["use_homework_components"])),
-        )
-        for prefix, label, count, enabled in component_groups:
-            for index in range(1, 7):
-                blueprints.append(
-                    {
-                        "component_code": f"{prefix}_{index}",
-                        "component_name": f"{label} {index}",
-                        "component_type": prefix,
-                        "order_no": order_no,
-                        "is_active": 1 if enabled and index <= count else 0,
-                    }
-                )
-                order_no += 1
-        if bool(scheme["use_practice_component"]):
+        for index in range(1, 7):
             blueprints.append(
                 {
-                    "component_code": "praktek",
-                    "component_name": "Praktek",
-                    "component_type": "praktek",
+                    "component_code": f"harian_{index}",
+                    "component_name": f"H{index}",
+                    "component_type": "harian",
                     "order_no": order_no,
-                    "is_active": 1,
+                    "is_active": 1 if bool(scheme["use_daily_components"]) and index <= int(scheme["daily_component_count"]) else 0,
                 }
             )
             order_no += 1
@@ -71,18 +76,13 @@ class GradeService:
         if not any(
             [
                 scheme["use_daily_components"] and scheme["daily_component_count"] > 0,
-                scheme["use_homework_components"] and scheme["homework_component_count"] > 0,
-                scheme["use_practice_component"],
                 scheme["use_mid_component"],
                 scheme["use_final_component"],
             ]
         ):
             return {
                 "daily_component_count": 3,
-                "homework_component_count": 0,
                 "use_daily_components": True,
-                "use_homework_components": False,
-                "use_practice_component": False,
                 "use_mid_component": True,
                 "use_final_component": True,
             }
@@ -94,22 +94,27 @@ class GradeService:
             return 0.0
         return round(sum(values) / len(values), 2)
 
-    def calculate_final_score(self, daily: float, mid: float, final: float, extra: float = 0) -> float:
-        settings = self.settings_service.get_settings()
-        scheme = self.settings_service.get_assessment_scheme()
+    def calculate_final_score(
+        self,
+        daily: float,
+        mid: float,
+        final: float,
+        extra: float = 0,
+        *,
+        subject_id: int | None = None,
+    ) -> float:
+        if subject_id:
+            scheme = self.get_component_scheme(subject_id)
+        else:
+            scheme = self.settings_service.get_assessment_scheme()
+        weight_task, weight_mid, weight_final = self.get_subject_weights(subject_id)
         active_weights: list[tuple[float, int]] = []
-        if any(
-            [
-                bool(scheme["use_daily_components"]) and int(scheme["daily_component_count"]) > 0,
-                bool(scheme["use_homework_components"]) and int(scheme["homework_component_count"]) > 0,
-                bool(scheme["use_practice_component"]),
-            ]
-        ):
-            active_weights.append((daily, int(settings["weight_task"])))
+        if bool(scheme["use_daily_components"]) and int(scheme["daily_component_count"]) > 0:
+            active_weights.append((daily, weight_task))
         if bool(scheme["use_mid_component"]):
-            active_weights.append((mid, int(settings["weight_mid"])))
+            active_weights.append((mid, weight_mid))
         if bool(scheme["use_final_component"]):
-            active_weights.append((final, int(settings["weight_final"])))
+            active_weights.append((final, weight_final))
         total_weight = sum(weight for _, weight in active_weights)
         weighted_score = 0.0 if total_weight == 0 else sum(score * weight for score, weight in active_weights) / total_weight
         result = weighted_score + extra
@@ -150,6 +155,7 @@ class GradeService:
         existing = {row["component_code"]: dict(row) for row in existing_rows}
         blueprints = self.get_component_blueprint(self._get_default_component_scheme())
         preserve_subject_layout = bool(existing_rows)
+        active_codes = {blueprint["component_code"] for blueprint in blueprints}
         for blueprint in blueprints:
             current = existing.get(blueprint["component_code"])
             if current:
@@ -184,6 +190,16 @@ class GradeService:
                         blueprint["is_active"],
                     ),
                 )
+        for code, row in existing.items():
+            if code not in active_codes:
+                self.database.execute(
+                    """
+                    UPDATE assessment_components
+                    SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (row["id"],),
+                )
         rows = self.database.fetch_all(
             """
             SELECT * FROM assessment_components
@@ -200,17 +216,8 @@ class GradeService:
             "daily_component_count": sum(
                 1 for row in rows if row["component_type"] == "harian" and int(row["is_active"]) == 1
             ),
-            "homework_component_count": sum(
-                1 for row in rows if row["component_type"] == "pr" and int(row["is_active"]) == 1
-            ),
             "use_daily_components": any(
                 row["component_type"] == "harian" and int(row["is_active"]) == 1 for row in rows
-            ),
-            "use_homework_components": any(
-                row["component_type"] == "pr" and int(row["is_active"]) == 1 for row in rows
-            ),
-            "use_practice_component": any(
-                row["component_code"] == "praktek" and int(row["is_active"]) == 1 for row in rows
             ),
             "use_mid_component": any(
                 row["component_code"] == "uts" and int(row["is_active"]) == 1 for row in rows
@@ -222,22 +229,14 @@ class GradeService:
 
     def update_component_layout(self, subject_id: int, payload: dict) -> None:
         daily_count = int(payload.get("daily_component_count", 0) or 0)
-        homework_count = int(payload.get("homework_component_count", 0) or 0)
         use_daily_components = bool(int(payload.get("use_daily_components", 0) or 0))
-        use_homework_components = bool(int(payload.get("use_homework_components", 0) or 0))
-        use_practice_component = bool(int(payload.get("use_practice_component", 0) or 0))
         use_mid_component = bool(int(payload.get("use_mid_component", 0) or 0))
         use_final_component = bool(int(payload.get("use_final_component", 0) or 0))
         if not use_daily_components:
             daily_count = 0
-        if not use_homework_components:
-            homework_count = 0
         self.settings_service.validate_component_counts(
             daily_count,
-            homework_count,
             use_daily_components=use_daily_components,
-            use_homework_components=use_homework_components,
-            use_practice_component=use_practice_component,
             use_mid_component=use_mid_component,
             use_final_component=use_final_component,
         )
@@ -245,10 +244,7 @@ class GradeService:
         for blueprint in self.get_component_blueprint(
             {
                 "daily_component_count": daily_count,
-                "homework_component_count": homework_count,
                 "use_daily_components": use_daily_components,
-                "use_homework_components": use_homework_components,
-                "use_practice_component": use_practice_component,
                 "use_mid_component": use_mid_component,
                 "use_final_component": use_final_component,
             }
@@ -272,7 +268,13 @@ class GradeService:
     def get_component_layout(self, subject_id: int) -> list[dict]:
         return [row for row in self.ensure_subject_components(subject_id) if int(row["is_active"]) == 1]
 
-    def get_student_component_scores(self, student_id: int, subject_id: int) -> dict[str, float]:
+    def get_student_component_scores(
+        self,
+        student_id: int,
+        subject_id: int,
+        *,
+        preserve_blank: bool = False,
+    ) -> dict[str, float | None]:
         self.ensure_subject_components(subject_id)
         rows = self.database.fetch_all(
             """
@@ -287,9 +289,12 @@ class GradeService:
             """,
             (student_id, subject_id, subject_id),
         )
-        result: dict[str, float] = {}
+        result: dict[str, float | None] = {}
         for row in rows:
-            result[row["component_code"]] = float(row["score"]) if row["score"] is not None else 0.0
+            if row["score"] is None and preserve_blank:
+                result[row["component_code"]] = None
+            else:
+                result[row["component_code"]] = float(row["score"]) if row["score"] is not None else 0.0
         return result
 
     def save_grade(self, payload: dict) -> None:
@@ -302,10 +307,8 @@ class GradeService:
             homework_scores = payload.get("homework_scores", [])
             component_scores = {
                 **{f"harian_{index}": value for index, value in enumerate(daily_scores, start=1)},
-                **{f"pr_{index}": value for index, value in enumerate(homework_scores, start=1)},
                 "uts": payload.get("mid_score", 0),
                 "uas": payload.get("final_score", 0),
-                "praktek": payload.get("practice_score", 0),
             }
         extra_score = self.validate_score(payload.get("extra_score", 0)) or 0.0
 
@@ -326,12 +329,18 @@ class GradeService:
         daily_bucket = [
             persisted_scores.get(component["component_code"])
             for component in active_layout
-            if component["component_type"] in {"harian", "pr", "praktek"}
+            if component["component_type"] == "harian"
         ]
         mid_score = persisted_scores.get("uts", 0.0)
         final_score = persisted_scores.get("uas", 0.0)
         daily_average = self.calculate_daily_average(daily_bucket)
-        final_result = self.calculate_final_score(daily_average, mid_score, final_score, extra_score)
+        final_result = self.calculate_final_score(
+            daily_average,
+            mid_score,
+            final_score,
+            extra_score,
+            subject_id=subject_id,
+        )
         predicate = self.get_predicate(final_result)
         kkm = self.get_subject_kkm(subject_id)
         status = self.get_status(final_result, subject_id=subject_id, kkm=kkm)
@@ -373,7 +382,8 @@ class GradeService:
     def get_grade_rows(self, class_id: int, subject_id: int) -> list[dict]:
         rows = self.database.fetch_all(
             """
-            SELECT s.id AS student_id, s.full_name, c.class_name, g.id AS grade_id,
+            SELECT s.id AS student_id, s.full_name, s.nis, c.class_name, g.id AS grade_id,
+                   ? AS subject_id,
                    COALESCE(g.task_score, 0) AS daily_score,
                    COALESCE(g.mid_score, 0) AS mid_score,
                    COALESCE(g.final_score, 0) AS final_score,
@@ -389,16 +399,20 @@ class GradeService:
             WHERE s.class_id = ?
             ORDER BY s.full_name
             """,
-            (subject_id, class_id),
+            (subject_id, subject_id, class_id),
         )
         data: list[dict] = []
         layout = self.get_component_layout(subject_id)
         kkm = self.get_subject_kkm(subject_id)
         for row in rows:
             item = dict(row)
-            scores = self.get_student_component_scores(item["student_id"], subject_id)
+            scores = self.get_student_component_scores(item["student_id"], subject_id, preserve_blank=True)
             item["component_layout"] = layout
-            item["component_scores"] = {component["component_code"]: scores.get(component["component_code"], 0.0) for component in layout}
+            item["component_scores"] = {
+                component["component_code"]: scores.get(component["component_code"])
+                for component in layout
+            }
+            item["has_grade_record"] = bool(item.get("grade_id"))
             item["kkm"] = kkm
             data.append(item)
         return data

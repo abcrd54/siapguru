@@ -6,7 +6,9 @@ from PySide6.QtWidgets import QApplication
 
 from app.database import DatabaseService
 from app.license import get_license_provider
+from app.update_checker import FirebaseUpdateChecker
 from app.workspace import WorkspaceManager
+from app.workspace_runtime import choose_workspace, migrate_legacy_workspace_if_needed, seed_workspace_settings
 from services.backup_service import BackupService
 from services.class_service import ClassService
 from services.excel_service import ExcelService
@@ -16,7 +18,7 @@ from services.report_service import ReportService
 from services.settings_service import SettingsService
 from services.student_service import StudentService
 from services.subject_service import SubjectService
-from ui.dialogs import InitialProfileDialog, LicenseActivationDialog, ModeSelectionDialog, error
+from ui.dialogs import InitialProfileDialog, LicenseActivationDialog, UpdateDialog, error
 from ui.main_window import MainWindow
 
 
@@ -30,10 +32,11 @@ def load_stylesheet() -> str:
     return style_path.read_text(encoding="utf-8") if style_path.exists() else ""
 
 
-def build_services(database: DatabaseService, workspace: WorkspaceManager, active_mode: str) -> dict:
+def build_services(database: DatabaseService, workspace: WorkspaceManager, workspace_id: str) -> dict:
     settings = SettingsService(database)
-    if settings.get_app_mode() != active_mode:
-        settings.set_workspace_mode(active_mode)
+    if settings.get_app_mode() != "guru":
+        settings.set_workspace_mode("guru")
+    current_workspace = workspace.get_workspace(workspace_id)
     classes = ClassService(database)
     subjects = SubjectService(database)
     students = StudentService(database, classes)
@@ -47,15 +50,17 @@ def build_services(database: DatabaseService, workspace: WorkspaceManager, activ
         grades,
         remedial,
         reports,
-        export_dir=workspace.get_export_dir(active_mode),
+        export_dir=workspace.get_export_dir(workspace_id),
     )
-    backup = BackupService(database, backup_dir=workspace.get_backup_dir(active_mode))
+    backup = BackupService(database, backup_dir=workspace.get_backup_dir(workspace_id))
 
     return {
         "database": database,
         "workspace": workspace,
-        "app_mode": active_mode,
+        "app_mode": "guru",
         "enabled_modes": workspace.get_enabled_modes(),
+        "workspace_id": workspace_id,
+        "current_workspace": current_workspace,
         "resource_path": resource_path,
         "settings": settings,
         "classes": classes,
@@ -69,37 +74,22 @@ def build_services(database: DatabaseService, workspace: WorkspaceManager, activ
     }
 
 
-def ensure_initial_profile(services: dict) -> bool:
-    settings_service = services["settings"]
-    if settings_service.is_profile_complete():
+def ensure_global_profile(workspace: WorkspaceManager) -> bool:
+    if workspace.has_profile():
         return True
-    settings = settings_service.get_settings()
+    profile = workspace.get_profile()
     dialog = InitialProfileDialog(
-        school_name=str(settings.get("school_name", "") or ""),
-        teacher_name=str(settings.get("teacher_name", "") or ""),
-        academic_year=str(settings.get("academic_year", "") or ""),
-        semester=str(settings.get("semester", "Ganjil") or "Ganjil"),
+        school_name=profile["school_name"],
+        teacher_name=profile["teacher_name"],
     )
     if not dialog.exec():
         return False
     payload = dialog.payload()
     if not all(payload.values()):
-        error(None, "Nama sekolah, nama guru, tahun ajaran, dan semester wajib diisi.")
-        return ensure_initial_profile(services)
-    try:
-        settings_service.update_settings(
-            {
-                **payload,
-                "app_mode": services["app_mode"],
-                "default_class_id": settings.get("default_class_id"),
-                "default_subject_id": settings.get("default_subject_id"),
-            }
-        )
-    except Exception as exc:
-        error(None, str(exc))
-        return ensure_initial_profile(services)
+        error(None, "Nama sekolah dan nama guru wajib diisi.")
+        return ensure_global_profile(workspace)
+    workspace.save_profile(**payload)
     return True
-
 
 def main() -> int:
     app = QApplication(sys.argv)
@@ -113,10 +103,7 @@ def main() -> int:
     license_provider = get_license_provider()
     license_profile = license_provider.get_profile()
     while not license_profile.is_activated:
-        dialog = LicenseActivationDialog(
-            source_label=license_profile.source,
-            helper_text=license_provider.get_activation_hint(),
-        )
+        dialog = LicenseActivationDialog()
         if not dialog.exec():
             return 0
         try:
@@ -129,26 +116,29 @@ def main() -> int:
     workspace.set_enabled_modes(license_profile.enabled_modes)
     active_mode = workspace.get_active_mode()
     if not active_mode or active_mode not in license_profile.enabled_modes:
-        if len(license_profile.enabled_modes) == 1:
-            active_mode = license_profile.enabled_modes[0]
-            workspace.set_active_mode(active_mode)
-        else:
-            dialog = ModeSelectionDialog(
-                current_mode=active_mode,
-                enabled_modes=license_profile.enabled_modes,
-                source_label=license_profile.source,
-            )
-            if dialog.exec() and dialog.selected_mode:
-                active_mode = dialog.selected_mode
-                workspace.set_active_mode(active_mode)
-            else:
-                return 0
-    database = DatabaseService(workspace.get_db_path(active_mode))
-    database.init_database()
-    services = build_services(database, workspace, active_mode)
-    services["license"] = license_profile
-    if not ensure_initial_profile(services):
+        workspace.set_active_mode(license_profile.enabled_modes[0])
+    migrate_legacy_workspace_if_needed(workspace)
+    if not ensure_global_profile(workspace):
         return 0
+    selected_workspace = choose_workspace(workspace, None)
+    if not selected_workspace:
+        return 0
+    workspace.set_active_workspace(selected_workspace["id"])
+    database = DatabaseService(workspace.get_db_path(selected_workspace["id"]))
+    database.init_database()
+    seed_workspace_settings(database, selected_workspace, workspace.get_profile())
+    services = build_services(database, workspace, selected_workspace["id"])
+    services["license"] = license_profile
+    try:
+        update_info = FirebaseUpdateChecker().check()
+    except Exception as exc:
+        error(None, str(exc))
+        return 0
+    if update_info and (update_info.update_available or update_info.update_required):
+        dialog = UpdateDialog(update_info)
+        dialog.exec()
+        if update_info.update_required:
+            return 0
 
     window = MainWindow(services)
     window.showMaximized()

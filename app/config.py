@@ -14,13 +14,16 @@ LICENSE_SOURCE = os.environ.get("SIAPGURU_LICENSE_SOURCE", "firebase")
 LOCAL_LICENSE_PATH = APP_DIR / "license_local.json"
 LOCAL_LICENSE_KEYS_PATH = APP_DIR / "license_keys_local.json"
 FIREBASE_LICENSE_CACHE_PATH = APP_DIR / "license_firebase_cache.json"
+FIREBASE_UPDATE_CACHE_PATH = APP_DIR / "update_firebase_cache.json"
 RESOURCE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 FIREBASE_CREDENTIALS_PATH = os.environ.get(
     "SIAPGURU_FIREBASE_CREDENTIALS",
-    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", str(RESOURCE_ROOT / "servicekey-py.json")),
+    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", ""),
 )
 FIREBASE_PROJECT_ID = os.environ.get("SIAPGURU_FIREBASE_PROJECT_ID", "")
 FIREBASE_COLLECTION = os.environ.get("SIAPGURU_FIREBASE_COLLECTION", "licenses")
+FIREBASE_RELEASES_COLLECTION = os.environ.get("SIAPGURU_FIREBASE_RELEASES_COLLECTION", "app_releases")
+FIREBASE_RELEASE_CHANNEL = os.environ.get("SIAPGURU_FIREBASE_RELEASE_CHANNEL", "production")
 APP_VERSION = os.environ.get("SIAPGURU_APP_VERSION", "1.0.0")
 DB_PATH = APP_DIR / "siapguru.db"
 EXPORT_DIR = DOCUMENTS_DIR / APP_NAME
@@ -40,10 +43,7 @@ DEFAULT_SETTINGS = {
     "weight_mid": 30,
     "weight_final": 40,
     "daily_component_count": 3,
-    "homework_component_count": 0,
     "use_daily_components": 1,
-    "use_homework_components": 0,
-    "use_practice_component": 0,
     "use_mid_component": 1,
     "use_final_component": 1,
 }

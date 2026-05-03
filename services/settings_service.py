@@ -18,31 +18,20 @@ class SettingsService:
     def validate_component_counts(
         self,
         daily_count: int,
-        homework_count: int,
         *,
         use_daily_components: bool,
-        use_homework_components: bool,
-        use_practice_component: bool,
         use_mid_component: bool,
         use_final_component: bool,
     ) -> None:
         if use_daily_components and (daily_count < 1 or daily_count > 6):
             raise ValueError("Jumlah kolom Harian aktif harus 1 - 6.")
-        if use_homework_components and (homework_count < 1 or homework_count > 6):
-            raise ValueError("Jumlah kolom PR aktif harus 1 - 6.")
         if not use_daily_components:
             daily_count = 0
-        if not use_homework_components:
-            homework_count = 0
         if daily_count < 0 or daily_count > 6:
             raise ValueError("Jumlah kolom Harian harus 0 - 6.")
-        if homework_count < 0 or homework_count > 6:
-            raise ValueError("Jumlah kolom PR harus 0 - 6.")
         if not any(
             [
                 use_daily_components and daily_count > 0,
-                use_homework_components and homework_count > 0,
-                use_practice_component,
                 use_mid_component,
                 use_final_component,
             ]
@@ -61,7 +50,6 @@ class SettingsService:
         )
         settings = current_settings
         daily_count = int(payload.get("daily_component_count", settings.get("daily_component_count", 3)))
-        homework_count = int(payload.get("homework_component_count", settings.get("homework_component_count", 0)))
         use_daily_components = bool(
             int(
                 payload.get(
@@ -70,29 +58,13 @@ class SettingsService:
                 )
             )
         )
-        use_homework_components = bool(
-            int(
-                payload.get(
-                    "use_homework_components",
-                    1 if homework_count > 0 else settings.get("use_homework_components", 0) or 0,
-                )
-            )
-        )
-        use_practice_component = bool(
-            int(payload.get("use_practice_component", settings.get("use_practice_component", 0) or 0))
-        )
         use_mid_component = bool(int(payload.get("use_mid_component", settings.get("use_mid_component", 1) or 0)))
         use_final_component = bool(int(payload.get("use_final_component", settings.get("use_final_component", 1) or 0)))
         if not use_daily_components:
             daily_count = 0
-        if not use_homework_components:
-            homework_count = 0
         self.validate_component_counts(
             daily_count,
-            homework_count,
             use_daily_components=use_daily_components,
-            use_homework_components=use_homework_components,
-            use_practice_component=use_practice_component,
             use_mid_component=use_mid_component,
             use_final_component=use_final_component,
         )
@@ -110,22 +82,22 @@ class SettingsService:
             """,
             (
                 payload.get("app_mode", self.get_app_mode()),
-                payload.get("default_class_id"),
-                payload.get("default_subject_id"),
-                payload.get("primary_class_id"),
-                payload["school_name"],
-                payload["teacher_name"],
-                payload["academic_year"],
-                payload["semester"],
+                payload.get("default_class_id", current_settings.get("default_class_id")),
+                payload.get("default_subject_id", current_settings.get("default_subject_id")),
+                payload.get("primary_class_id", current_settings.get("primary_class_id")),
+                payload.get("school_name", current_settings.get("school_name", "")),
+                payload.get("teacher_name", current_settings.get("teacher_name", "")),
+                payload.get("academic_year", current_settings.get("academic_year", "")),
+                payload.get("semester", current_settings.get("semester", "Ganjil")),
                 kkm,
                 int(payload.get("weight_task", settings.get("weight_task", 30))),
                 int(payload.get("weight_mid", settings.get("weight_mid", 30))),
                 int(payload.get("weight_final", settings.get("weight_final", 40))),
                 daily_count,
-                homework_count,
+                0,
                 1 if use_daily_components else 0,
-                1 if use_homework_components else 0,
-                1 if use_practice_component else 0,
+                0,
+                0,
                 1 if use_mid_component else 0,
                 1 if use_final_component else 0,
             ),
@@ -152,16 +124,13 @@ class SettingsService:
         settings = self.get_settings()
         return {
             "daily_component_count": int(settings.get("daily_component_count", 3) or 0),
-            "homework_component_count": int(settings.get("homework_component_count", 0) or 0),
             "use_daily_components": bool(int(settings.get("use_daily_components", 1) or 0)),
-            "use_homework_components": bool(int(settings.get("use_homework_components", 0) or 0)),
-            "use_practice_component": bool(int(settings.get("use_practice_component", 0) or 0)),
             "use_mid_component": bool(int(settings.get("use_mid_component", 1) or 0)),
             "use_final_component": bool(int(settings.get("use_final_component", 1) or 0)),
         }
 
     def set_workspace_mode(self, app_mode: str) -> None:
-        if app_mode not in {"guru_mapel", "wali_kelas"}:
+        if app_mode != "guru":
             raise ValueError("Mode aplikasi tidak valid.")
         self.database.execute(
             """

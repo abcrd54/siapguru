@@ -28,6 +28,50 @@ class ReportService:
             sentence += " Perlu pendampingan dan latihan lanjutan agar pemahaman materi semakin baik."
         return sentence
 
+    def _effective_grade_snapshot(self, row: dict) -> dict:
+        remedial = self.remedial_service.get_record_by_grade(row["grade_id"]) if row.get("grade_id") else None
+        effective_score = (
+            float(remedial["adjusted_score"])
+            if remedial and remedial.get("adjusted_score") is not None
+            else float(row.get("final_result") or 0)
+        )
+        effective_status = (
+            str(remedial["remedial_status"] or "").strip()
+            if remedial and remedial.get("remedial_status")
+            else str(row.get("status", "") or "").strip()
+        )
+        effective_predicate = self.grade_service.get_predicate(effective_score)
+        return {
+            "effective_score": round(effective_score, 2),
+            "effective_status": effective_status,
+            "effective_predicate": effective_predicate,
+            "remedial": remedial,
+        }
+
+    def _should_regenerate_description(self, row: dict, snapshot: dict) -> bool:
+        description = str(row.get("description", "") or "").strip()
+        if not description:
+            return True
+        stored_score = round(float(row.get("final_result") or 0), 2)
+        stored_predicate = str(row.get("predicate", "") or "").strip()
+        stored_status = str(row.get("status", "") or "").strip()
+        if stored_score != snapshot["effective_score"]:
+            return True
+        if stored_predicate != snapshot["effective_predicate"]:
+            return True
+        if stored_status != snapshot["effective_status"]:
+            return True
+        description_updated = str(row.get("description_updated_at", "") or "").strip()
+        grade_updated = str(row.get("grade_updated_at", "") or "").strip()
+        remedial_updated = str(row.get("remedial_updated_at", "") or "").strip()
+        if not description_updated:
+            return True
+        if grade_updated and description_updated < grade_updated:
+            return True
+        if remedial_updated and description_updated < remedial_updated:
+            return True
+        return False
+
     def generate_all_descriptions(self, class_id: int, subject_id: int) -> list[dict]:
         rows = self.database.fetch_all(
             """
@@ -43,21 +87,21 @@ class ReportService:
         )
         items = []
         for row in rows:
-            remedial = self.remedial_service.get_record_by_grade(row["grade_id"])
-            effective_score = remedial["adjusted_score"] if remedial and remedial.get("adjusted_score") is not None else row["final_result"]
-            effective_status = remedial["remedial_status"] if remedial and remedial.get("remedial_status") else row["status"]
-            effective_predicate = self.grade_service.get_predicate(float(effective_score))
+            snapshot = self._effective_grade_snapshot(dict(row))
             items.append(
                 {
                     "grade_id": row["grade_id"],
                     "student_id": row["student_id"],
                     "full_name": row["full_name"],
                     "subject_name": row["subject_name"],
-                    "final_result": effective_score,
-                    "predicate": effective_predicate,
-                    "status": effective_status,
+                    "final_result": snapshot["effective_score"],
+                    "predicate": snapshot["effective_predicate"],
+                    "status": snapshot["effective_status"],
                     "description": self.generate_description(
-                        row["full_name"], row["subject_name"], effective_predicate, effective_status
+                        row["full_name"],
+                        row["subject_name"],
+                        snapshot["effective_predicate"],
+                        snapshot["effective_status"],
                     ),
                 }
             )
@@ -96,11 +140,10 @@ class ReportService:
         query += " ORDER BY c.class_name, s.full_name"
         rows = [dict(row) for row in self.database.fetch_all(query, params)]
         for row in rows:
-            remedial = self.remedial_service.get_record_by_grade(row["grade_id"]) if row.get("grade_id") else None
-            if remedial and remedial.get("adjusted_score") is not None:
-                row["final_result"] = remedial["adjusted_score"]
-                row["status"] = remedial["remedial_status"]
-                row["predicate"] = self.grade_service.get_predicate(float(remedial["adjusted_score"]))
+            snapshot = self._effective_grade_snapshot(row)
+            row["final_result"] = snapshot["effective_score"]
+            row["status"] = snapshot["effective_status"]
+            row["predicate"] = snapshot["effective_predicate"]
         return rows
 
     def get_report_book_data(self, class_id: int) -> list[dict]:
@@ -121,10 +164,12 @@ class ReportService:
                 """
                 SELECT sub.subject_name,
                        COALESCE(rd.description, '') AS description,
+                       rd.updated_at AS description_updated_at,
                        COALESCE(g.final_result, 0) AS final_result,
                        COALESCE(g.predicate, '') AS predicate,
                        COALESCE(g.status, '') AS status,
-                       g.id AS grade_id
+                       g.id AS grade_id,
+                       g.updated_at AS grade_updated_at
                 FROM grades g
                 JOIN subjects sub ON sub.id = g.subject_id
                 LEFT JOIN report_descriptions rd
@@ -137,21 +182,27 @@ class ReportService:
             )
             lessons: list[dict] = []
             for row in subject_rows:
-                effective_score = float(row["final_result"])
-                effective_predicate = row["predicate"] or self.grade_service.get_predicate(effective_score)
-                description = str(row["description"] or "").strip()
-                if not description:
+                row_data = dict(row)
+                snapshot = self._effective_grade_snapshot(row_data)
+                effective_score = snapshot["effective_score"]
+                effective_predicate = snapshot["effective_predicate"]
+                effective_status = snapshot["effective_status"]
+                remedial = snapshot["remedial"]
+                row_data["remedial_updated_at"] = str(remedial.get("updated_at", "") or "") if remedial else ""
+                description = str(row_data["description"] or "").strip()
+                if self._should_regenerate_description(row_data, snapshot):
                     description = self.generate_description(
                         str(student["full_name"]),
-                        str(row["subject_name"]),
+                        str(row_data["subject_name"]),
                         effective_predicate,
-                        str(row["status"] or ""),
+                        effective_status,
                     )
                 lessons.append(
                     {
-                        "subject_name": row["subject_name"],
+                        "subject_name": row_data["subject_name"],
                         "final_result": round(effective_score, 2),
                         "predicate": effective_predicate,
+                        "status": effective_status,
                         "description": description,
                     }
                 )

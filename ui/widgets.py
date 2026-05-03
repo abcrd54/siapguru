@@ -161,12 +161,12 @@ def badge_item(value: object, *, editable: bool = False) -> QTableWidgetItem:
 def add_row_actions(table: QTableWidget, row: int, actions: list[tuple[str, callable]]) -> None:
     wrapper = QWidget()
     layout = QHBoxLayout(wrapper)
-    layout.setContentsMargins(4, 2, 4, 2)
-    layout.setSpacing(4)
+    layout.setContentsMargins(8, 4, 8, 4)
+    layout.setSpacing(10)
     for label, callback in actions:
         button = ActionButton("", compact=True)
         button.setToolTip(label)
-        button.setFixedWidth(40)
+        button.setFixedWidth(46)
         button.setProperty("iconOnly", True)
         button.setProperty("actionRole", _action_role(label))
         icon = _action_icon(wrapper, label)
@@ -175,6 +175,7 @@ def add_row_actions(table: QTableWidget, row: int, actions: list[tuple[str, call
         button.clicked.connect(callback)
         layout.addWidget(button)
     layout.addStretch()
+    wrapper.setMinimumWidth((len(actions) * 46) + (max(0, len(actions) - 1) * 10) + 20)
     table.setCellWidget(row, table.columnCount() - 1, wrapper)
 
 
