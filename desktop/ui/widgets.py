@@ -158,24 +158,34 @@ def badge_item(value: object, *, editable: bool = False) -> QTableWidgetItem:
     return item
 
 
-def add_row_actions(table: QTableWidget, row: int, actions: list[tuple[str, callable]]) -> None:
+def add_row_actions(
+    table: QTableWidget,
+    row: int,
+    actions: list[tuple[str, callable]],
+    *,
+    show_text: bool = False,
+) -> None:
     wrapper = QWidget()
     layout = QHBoxLayout(wrapper)
     layout.setContentsMargins(8, 4, 8, 4)
     layout.setSpacing(10)
     for label, callback in actions:
-        button = ActionButton("", compact=True)
+        button = ActionButton(label if show_text else "", compact=True)
         button.setToolTip(label)
-        button.setFixedWidth(46)
-        button.setProperty("iconOnly", True)
         button.setProperty("actionRole", _action_role(label))
+        if show_text:
+            button.setMinimumWidth(64)
+        else:
+            button.setFixedWidth(46)
+            button.setProperty("iconOnly", True)
         icon = _action_icon(wrapper, label)
         if icon is not None:
             button.setIcon(icon)
         button.clicked.connect(callback)
         layout.addWidget(button)
-    layout.addStretch()
-    wrapper.setMinimumWidth((len(actions) * 46) + (max(0, len(actions) - 1) * 10) + 20)
+    if not show_text:
+        layout.addStretch()
+        wrapper.setMinimumWidth((len(actions) * 46) + (max(0, len(actions) - 1) * 10) + 20)
     table.setCellWidget(row, table.columnCount() - 1, wrapper)
 
 
@@ -187,6 +197,7 @@ def _action_icon(widget: QWidget, label: str):
         "Terapkan": QStyle.SP_DialogApplyButton,
         "Reset": QStyle.SP_BrowserReload,
         "Buka": QStyle.SP_DialogOpenButton,
+        "Lihat": QStyle.SP_FileDialogContentsView,
         "Salin": QStyle.SP_FileDialogContentsView,
     }
     icon_type = icon_map.get(label)
@@ -203,6 +214,7 @@ def _action_role(label: str) -> str:
         "Terapkan": "apply",
         "Reset": "reset",
         "Buka": "open",
+        "Lihat": "open",
         "Salin": "copy",
     }
     return role_map.get(label, "default")

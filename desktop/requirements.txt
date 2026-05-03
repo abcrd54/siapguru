@@ -5,3 +5,5 @@ SQLAlchemy
 pyinstaller
 firebase-admin
 google-cloud-firestore
+pypdf
+cloudinary

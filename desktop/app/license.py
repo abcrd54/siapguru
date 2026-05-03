@@ -7,8 +7,13 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib import error, request
 
 from app.config import (
+    ADMIN_API_BASE_URL,
+    ADMIN_API_TIMEOUT,
+    ADMIN_API_TOKEN,
+    ADMIN_LICENSE_CACHE_PATH,
     APP_VERSION,
     FIREBASE_COLLECTION,
     FIREBASE_CREDENTIALS_PATH,
@@ -28,6 +33,7 @@ class LicenseProfile:
     customer_name: str = ""
     active_key: str = ""
     notes: str = ""
+    features: dict | None = None
     is_activated: bool = False
 
 
@@ -61,6 +67,7 @@ class LocalLicenseProvider(BaseLicenseProvider):
                 customer_name=str(state.get("customer_name", "") or ""),
                 active_key="",
                 notes="Aplikasi belum diaktivasi. Masukkan key untuk membuka dashboard guru.",
+                features={},
                 is_activated=False,
             )
         enabled_modes = self._clean_modes(state.get("enabled_modes", []))
@@ -71,6 +78,7 @@ class LocalLicenseProvider(BaseLicenseProvider):
                 customer_name=str(state.get("customer_name", "") or ""),
                 active_key="",
                 notes="Key aktif tidak memiliki mode yang valid.",
+                features={},
                 is_activated=False,
             )
         return LicenseProfile(
@@ -79,6 +87,7 @@ class LocalLicenseProvider(BaseLicenseProvider):
             customer_name=str(state.get("customer_name", "") or ""),
             active_key=str(state.get("active_key", "") or ""),
             notes=str(state.get("notes", "") or ""),
+            features=self._clean_features(state.get("features", {})),
             is_activated=True,
         )
 
@@ -109,6 +118,7 @@ class LocalLicenseProvider(BaseLicenseProvider):
             "active_key": str(match.get("key", normalized_key)),
             "enabled_modes": enabled_modes,
             "notes": str(match.get("notes", "Aktivasi lokal berhasil.")),
+            "features": {"guru": True},
             "is_activated": True,
         }
         self.license_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
@@ -118,6 +128,7 @@ class LocalLicenseProvider(BaseLicenseProvider):
             customer_name=state["customer_name"],
             active_key=state["active_key"],
             notes=state["notes"],
+            features=self._clean_features(state.get("features", {})),
             is_activated=True,
         )
 
@@ -168,8 +179,14 @@ class LocalLicenseProvider(BaseLicenseProvider):
                 "customer_name": "Testing Guru",
                 "enabled_modes": ["guru"],
                 "notes": "Key testing lokal untuk membuka dashboard guru.",
+                "features": {"guru": True},
             },
         ]
+
+    def _clean_features(self, features: object) -> dict:
+        if not isinstance(features, dict):
+            return {}
+        return {str(key): bool(value) for key, value in features.items()}
 
 
 class FirebaseLicenseProvider(BaseLicenseProvider):
@@ -195,6 +212,7 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
                 source=self.source_name,
                 enabled_modes=[],
                 notes="Aplikasi belum diaktivasi. Masukkan key Firebase untuk membuka dashboard guru.",
+                features={},
                 is_activated=False,
             )
         if self._is_cache_still_valid(cached):
@@ -205,6 +223,7 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
                 source=self.source_name,
                 enabled_modes=[],
                 notes="Cache lisensi Firebase tidak lengkap. Aktivasi ulang diperlukan.",
+                features={},
                 is_activated=False,
             )
         try:
@@ -223,6 +242,7 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
                 customer_name=str(cached.get("customer_name", "") or ""),
                 active_key="",
                 notes="Lisensi Firebase tidak dapat diverifikasi dan masa offline sudah habis.",
+                features=self._clean_features(cached.get("features", {})),
                 is_activated=False,
             )
 
@@ -365,6 +385,7 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
             "active_key": active_key,
             "enabled_modes": enabled_modes,
             "notes": self._build_notes(payload, offline=False),
+            "features": self._clean_features(payload.get("features", {})),
             "is_activated": True,
             "license_role": str(payload.get("license_role", "") or ""),
             "allow_offline_days": int(payload.get("allow_offline_days", 0) or 0),
@@ -382,7 +403,7 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
     def _extract_enabled_modes(self, payload: dict) -> list[str]:
         features = payload.get("features") or {}
         if isinstance(features, dict):
-            if bool(features.get("guru")):
+            if bool(features.get("reports")) or bool(features.get("grades")) or bool(features.get("modules")) or bool(features.get("questions")):
                 return ["guru"]
         role = str(payload.get("license_role", "") or "").strip().lower()
         role_map = {
@@ -411,6 +432,7 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
             customer_name=str(cache.get("customer_name", "") or ""),
             active_key=str(cache.get("active_key", "") or ""),
             notes=str(cache.get("notes", "") or "") + (" Cache offline digunakan." if offline else ""),
+            features=self._clean_features(cache.get("features", {})),
             is_activated=bool(cache.get("is_activated", False)),
         )
 
@@ -426,6 +448,11 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
         if not isinstance(modes, (list, tuple)):
             return []
         return [mode for mode in modes if mode in MODE_LABELS]
+
+    def _clean_features(self, features: object) -> dict:
+        if not isinstance(features, dict):
+            return {}
+        return {str(key): bool(value) for key, value in features.items()}
 
     def _device_id(self) -> str:
         return f"{socket.gethostname()}-{uuid.getnode()}"
@@ -477,8 +504,189 @@ class FirebaseLicenseProvider(BaseLicenseProvider):
         return str(data.get("project_id", "") or "").strip()
 
 
+class AdminLicenseProvider(BaseLicenseProvider):
+    source_name = "admin"
+
+    def __init__(
+        self,
+        cache_path: Path | None = None,
+        base_url: str | None = None,
+        auth_token: str | None = None,
+    ) -> None:
+        self.cache_path = cache_path or ADMIN_LICENSE_CACHE_PATH
+        self.base_url = str(base_url or ADMIN_API_BASE_URL or "").strip().rstrip("/")
+        self.auth_token = str(auth_token or ADMIN_API_TOKEN or "").strip()
+
+    def get_profile(self) -> LicenseProfile:
+        cached = self._read_cache()
+        if cached.get("is_activated") is not True:
+            return LicenseProfile(
+                source=self.source_name,
+                enabled_modes=[],
+                notes="Aplikasi belum diaktivasi. Masukkan key lisensi dari dashboard admin.",
+                features={},
+                is_activated=False,
+            )
+        active_key = str(cached.get("active_key", "") or "").strip()
+        if not active_key:
+            return LicenseProfile(source=self.source_name, enabled_modes=[], notes="Cache lisensi admin tidak lengkap.", features={}, is_activated=False)
+        if self._is_cache_still_valid(cached):
+            return self._profile_from_cache(cached, offline=True)
+        try:
+            payload = self._post("/api/desktop/license/validate", self._device_payload(active_key))
+            cache = self._build_cache(payload, active_key)
+            self._write_cache(cache)
+            return self._profile_from_cache(cache, offline=False)
+        except Exception:
+            if self._is_cache_still_valid(cached):
+                return self._profile_from_cache(cached, offline=True)
+            return LicenseProfile(
+                source=self.source_name,
+                enabled_modes=[],
+                customer_name=str(cached.get("customer_name", "") or ""),
+                active_key="",
+                notes="Lisensi admin tidak dapat diverifikasi dan masa offline sudah habis.",
+                features=self._clean_features(cached.get("features", {})),
+                is_activated=False,
+            )
+
+    def activate_key(self, key: str) -> LicenseProfile:
+        normalized_key = key.strip()
+        if not normalized_key:
+            raise ValueError("Key wajib diisi.")
+        payload = self._post("/api/desktop/license/activate", self._device_payload(normalized_key))
+        cache = self._build_cache(payload, normalized_key)
+        self._write_cache(cache)
+        return self._profile_from_cache(cache, offline=False)
+
+    def get_activation_hint(self) -> str:
+        return "Validasi key dilakukan ke dashboard admin. Aplikasi menyimpan cache lokal agar tetap bisa dipakai offline."
+
+    def _post(self, path: str, payload: dict) -> dict:
+        if not self.base_url:
+            raise RuntimeError("Konfigurasi Admin API belum lengkap. Isi SIAPGURU_ADMIN_API_BASE_URL.")
+        body = json.dumps(payload).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
+        req = request.Request(f"{self.base_url}{path}", data=body, headers=headers, method="POST")
+        try:
+            with request.urlopen(req, timeout=ADMIN_API_TIMEOUT) as response:
+                raw = response.read().decode("utf-8")
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"Admin API error {exc.code}: {detail or exc.reason}") from exc
+        except error.URLError as exc:
+            raise RuntimeError(f"Koneksi ke Admin API gagal: {exc.reason}") from exc
+        data = json.loads(raw)
+        if data.get("success", True) is False:
+            raise ValueError(str(data.get("message", "Validasi lisensi gagal.")))
+        return data.get("data", data)
+
+    def _device_payload(self, license_key: str) -> dict:
+        return {
+            "license_key": license_key,
+            "device_id": self._device_id(),
+            "device_name": socket.gethostname(),
+            "app_version": APP_VERSION,
+        }
+
+    def _build_cache(self, payload: dict, active_key: str) -> dict:
+        now = datetime.now(UTC)
+        allow_offline_days = int(payload.get("allow_offline_days", 0) or 0)
+        enabled_modes = self._extract_enabled_modes(payload)
+        if not enabled_modes:
+            enabled_modes = ["guru"]
+        return {
+            "source": self.source_name,
+            "customer_name": str(payload.get("customer_name") or payload.get("teacher_name") or payload.get("school_name") or ""),
+            "active_key": active_key,
+            "enabled_modes": enabled_modes,
+            "notes": str(payload.get("notes", "") or "Lisensi admin aktif.").strip(),
+            "features": self._clean_features(payload.get("features", {})),
+            "is_activated": True,
+            "allow_offline_days": allow_offline_days,
+            "last_validated_at": now.isoformat(),
+            "cached_until": (now + timedelta(days=allow_offline_days)).isoformat(),
+        }
+
+    def _extract_enabled_modes(self, payload: dict) -> list[str]:
+        modes = payload.get("enabled_modes")
+        if isinstance(modes, list):
+            cleaned = [str(mode) for mode in modes if str(mode) in MODE_LABELS]
+            if cleaned:
+                return cleaned
+        features = payload.get("features") or {}
+        if isinstance(features, dict) and (
+            bool(features.get("reports"))
+            or bool(features.get("grades"))
+            or bool(features.get("modules"))
+            or bool(features.get("questions"))
+        ):
+            return ["guru"]
+        return []
+
+    def _read_cache(self) -> dict:
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.cache_path.exists():
+            return {}
+        try:
+            data = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _write_cache(self, payload: dict) -> None:
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        self.cache_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def _profile_from_cache(self, cache: dict, *, offline: bool) -> LicenseProfile:
+        return LicenseProfile(
+            source=self.source_name,
+            enabled_modes=self._clean_modes(cache.get("enabled_modes", [])),
+            customer_name=str(cache.get("customer_name", "") or ""),
+            active_key=str(cache.get("active_key", "") or ""),
+            notes=str(cache.get("notes", "") or "") + (" Cache offline digunakan." if offline else ""),
+            features=self._clean_features(cache.get("features", {})),
+            is_activated=bool(cache.get("is_activated", False)),
+        )
+
+    def _is_cache_still_valid(self, cache: dict) -> bool:
+        if cache.get("is_activated") is not True:
+            return False
+        cached_until = self._parse_datetime(cache.get("cached_until"))
+        return bool(cached_until and cached_until >= datetime.now(UTC))
+
+    def _clean_modes(self, modes: list[str] | tuple[str, ...] | object) -> list[str]:
+        if not isinstance(modes, (list, tuple)):
+            return []
+        return [mode for mode in modes if mode in MODE_LABELS]
+
+    def _clean_features(self, features: object) -> dict:
+        if not isinstance(features, dict):
+            return {}
+        return {str(key): bool(value) for key, value in features.items()}
+
+    def _device_id(self) -> str:
+        return f"{socket.gethostname()}-{uuid.getnode()}"
+
+    def _parse_datetime(self, value) -> datetime | None:
+        if not value:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+        except ValueError:
+            return None
+
+
 def get_license_provider(source: str | None = None) -> BaseLicenseProvider:
     source = (source or LICENSE_SOURCE).strip().lower()
+    if source == "admin":
+        return AdminLicenseProvider()
     if source and source != "firebase":
-        raise RuntimeError("Aktivasi lokal sudah dinonaktifkan. SiapGuru hanya menerima lisensi Firebase.")
+        raise RuntimeError("Sumber lisensi tidak valid. Gunakan `firebase` atau `admin`.")
     return FirebaseLicenseProvider()

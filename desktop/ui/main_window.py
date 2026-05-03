@@ -16,12 +16,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.license_features import page_enabled
 from app.workspace_runtime import choose_workspace
 from pages.backup_page import BackupPage
 from pages.classes_page import ClassesPage
 from pages.dashboard_page import DashboardPage
 from pages.export_page import ExportPage
 from pages.grades_page import GradesPage
+from pages.modules_page import ModulesPage
+from pages.questions_page import QuestionsPage
 from pages.reports_page import ReportsPage
 from pages.settings_page import SettingsPage
 from pages.smart_ketuntasan_page import SmartKetuntasanPage
@@ -38,6 +41,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("SiapGuru")
         self.setMinimumSize(1280, 720)
         self.resource_path = self.services.get("resource_path")
+        license_profile = self.services.get("license")
+        self.license_features = getattr(license_profile, "features", {}) or {}
         self._apply_window_icon()
 
         central = QWidget()
@@ -56,8 +61,7 @@ class MainWindow(QMainWindow):
         self.sidebar = QListWidget()
         self.sidebar.setObjectName("SidebarMenu")
         self.sidebar.currentRowChanged.connect(self.change_page)
-        sidebar_layout.addWidget(self.sidebar)
-        sidebar_layout.addStretch()
+        sidebar_layout.addWidget(self.sidebar, 1)
         self.workspace_button = ActionButton("Ganti Workspace", compact=True)
         self.workspace_button.setMaximumWidth(180)
         self.workspace_button.clicked.connect(self.change_workspace)
@@ -81,6 +85,8 @@ class MainWindow(QMainWindow):
             "Data Kelas": ClassesPage(services),
             "Mata Pelajaran": SubjectsPage(services),
             "Nilai": GradesPage(services),
+            "Modul": ModulesPage(services),
+            "Soal": QuestionsPage(services),
             "Katrol Nilai": SmartKetuntasanPage(services),
             "Buat Raport": ReportsPage(services),
             "Unduh Laporan": ExportPage(services),
@@ -96,12 +102,15 @@ class MainWindow(QMainWindow):
             "Nilai",
             "Katrol Nilai",
             "Buat Raport",
+            "Modul",
+            "Soal",
             "Unduh Laporan",
             "Backup",
             "Pengaturan",
         ]
-        self.default_page = "Beranda"
-        self.pages = {name: all_pages[name] for name in page_order}
+        filtered_page_order = [name for name in page_order if page_enabled(self.license_features, name)]
+        self.default_page = "Beranda" if "Beranda" in filtered_page_order else (filtered_page_order[0] if filtered_page_order else "")
+        self.pages = {name: all_pages[name] for name in filtered_page_order}
 
         for name, page in self.pages.items():
             self.sidebar.addItem(QListWidgetItem(name))
@@ -113,7 +122,8 @@ class MainWindow(QMainWindow):
         content_layout.addWidget(self.stack)
         root.addWidget(sidebar_shell)
         root.addWidget(content)
-        self.navigate_to(self.default_page)
+        if self.default_page:
+            self.navigate_to(self.default_page)
 
     def _resource(self, *parts: str) -> Path | None:
         if not self.resource_path:
@@ -136,6 +146,8 @@ class MainWindow(QMainWindow):
         return f"{teacher_name} | {workspace_label}"
 
     def change_page(self, index: int) -> None:
+        if index < 0:
+            return
         self.stack.setCurrentIndex(index)
         self.meta_label.setText(self._meta_text())
         page = self.stack.currentWidget()

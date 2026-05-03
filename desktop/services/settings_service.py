@@ -73,6 +73,7 @@ class SettingsService:
             UPDATE settings
             SET app_mode = ?, default_class_id = ?, default_subject_id = ?, primary_class_id = ?,
                 school_name = ?, teacher_name = ?, academic_year = ?, semester = ?,
+                admin_api_base_url = ?, admin_api_token = ?,
                 kkm = ?, weight_task = ?, weight_mid = ?, weight_final = ?,
                 daily_component_count = ?, homework_component_count = ?,
                 use_daily_components = ?, use_homework_components = ?, use_practice_component = ?,
@@ -89,6 +90,8 @@ class SettingsService:
                 payload.get("teacher_name", current_settings.get("teacher_name", "")),
                 payload.get("academic_year", current_settings.get("academic_year", "")),
                 payload.get("semester", current_settings.get("semester", "Ganjil")),
+                payload.get("admin_api_base_url", current_settings.get("admin_api_base_url", "")),
+                payload.get("admin_api_token", current_settings.get("admin_api_token", "")),
                 kkm,
                 int(payload.get("weight_task", settings.get("weight_task", 30))),
                 int(payload.get("weight_mid", settings.get("weight_mid", 30))),
@@ -150,6 +153,13 @@ class SettingsService:
             "default_class_id": settings.get("default_class_id"),
             "default_subject_id": settings.get("default_subject_id"),
             "primary_class_id": settings.get("primary_class_id"),
+        }
+
+    def get_admin_api_config(self) -> dict:
+        settings = self.get_settings()
+        return {
+            "admin_api_base_url": str(settings.get("admin_api_base_url", "") or "").strip(),
+            "admin_api_token": str(settings.get("admin_api_token", "") or "").strip(),
         }
 
     def update_active_context(

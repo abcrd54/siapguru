@@ -3,6 +3,7 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from app.license_features import page_enabled
 from ui.widgets import ActionButton, CardWidget, PageHeader
 
 
@@ -12,6 +13,7 @@ class DashboardPage(QWidget):
     def __init__(self, services: dict) -> None:
         super().__init__()
         self.services = services
+        self.license_features = getattr(self.services.get("license"), "features", {}) or {}
         layout = QVBoxLayout(self)
         subtitle = "Pantau workspace aktif, cek progres kelas dan mapel, lalu lanjutkan ke input nilai atau pembuatan raport."
         layout.addWidget(PageHeader("Beranda", subtitle))
@@ -60,11 +62,15 @@ class DashboardPage(QWidget):
             "Input Nilai": "Nilai",
             "Atur Mapel": "Mata Pelajaran",
             "Data Kelas": "Data Kelas",
+            "Modul": "Modul",
+            "Soal": "Soal",
             "Buat Raport": "Buat Raport",
             "Unduh Laporan": "Unduh Laporan",
         }
-        primary = {"Input Nilai", "Unduh Laporan"}
+        primary = {"Input Nilai", "Modul", "Soal", "Unduh Laporan"}
         for label, target in targets.items():
+            if not page_enabled(self.license_features, target):
+                continue
             button = ActionButton(label, primary=label in primary)
             button.setMaximumWidth(168)
             button.clicked.connect(lambda _, page=target: self.navigate_requested.emit(page))

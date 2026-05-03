@@ -13,8 +13,14 @@ APP_DATAS = [
     ("assets/icon.ico", "assets"),
     ("assets/logo-siapguru.png", "assets"),
 ]
+if os.path.exists(".env"):
+    APP_DATAS.append((".env", "."))
 
-HIDDEN_IMPORTS = collect_submodules("firebase_admin") + collect_submodules("google.cloud.firestore")
+HIDDEN_IMPORTS = (
+    collect_submodules("firebase_admin")
+    + collect_submodules("google.cloud.firestore")
+    + collect_submodules("pypdf")
+)
 BINARIES = collect_dynamic_libs("numpy")
 DATAS = (
     APP_DATAS
@@ -23,6 +29,7 @@ DATAS = (
     + copy_metadata("openpyxl")
     + copy_metadata("firebase-admin")
     + copy_metadata("google-cloud-firestore")
+    + copy_metadata("pypdf")
 )
 
 

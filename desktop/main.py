@@ -10,9 +10,15 @@ from app.update_checker import FirebaseUpdateChecker
 from app.workspace import WorkspaceManager
 from app.workspace_runtime import choose_workspace, migrate_legacy_workspace_if_needed, seed_workspace_settings
 from services.backup_service import BackupService
+from services.admin_api_service import AdminApiService
 from services.class_service import ClassService
+from services.cloudinary_service import CloudinaryService
 from services.excel_service import ExcelService
 from services.grade_service import GradeService
+from services.ai_service import AIService
+from services.module_service import ModuleService
+from services.question_service import QuestionService
+from services.remote_storage_service import RemoteStorageService
 from services.remedial_service import RemedialService
 from services.report_service import ReportService
 from services.settings_service import SettingsService
@@ -32,7 +38,7 @@ def load_stylesheet() -> str:
     return style_path.read_text(encoding="utf-8") if style_path.exists() else ""
 
 
-def build_services(database: DatabaseService, workspace: WorkspaceManager, workspace_id: str) -> dict:
+def build_services(database: DatabaseService, workspace: WorkspaceManager, workspace_id: str, license_profile=None) -> dict:
     settings = SettingsService(database)
     if settings.get_app_mode() != "guru":
         settings.set_workspace_mode("guru")
@@ -41,6 +47,14 @@ def build_services(database: DatabaseService, workspace: WorkspaceManager, works
     subjects = SubjectService(database)
     students = StudentService(database, classes)
     grades = GradeService(database, settings)
+    admin_api = AdminApiService(settings)
+    if license_profile:
+        admin_api.set_active_license_key(getattr(license_profile, "active_key", "") or "")
+    cloudinary = CloudinaryService()
+    storage = RemoteStorageService(admin_api, cloudinary)
+    ai_service = AIService(admin_api=admin_api)
+    modules = ModuleService(database, workspace.get_workspace_dir(workspace_id), cloudinary=storage)
+    questions = QuestionService(database, modules, ai_service=ai_service)
     remedial = RemedialService(database, settings, grades)
     reports = ReportService(database, grades, remedial)
     excel = ExcelService(
@@ -67,6 +81,12 @@ def build_services(database: DatabaseService, workspace: WorkspaceManager, works
         "subjects": subjects,
         "students": students,
         "grades": grades,
+        "cloudinary": cloudinary,
+        "admin_api": admin_api,
+        "storage": storage,
+        "ai": ai_service,
+        "modules": modules,
+        "questions": questions,
         "remedial": remedial,
         "reports": reports,
         "excel": excel,
@@ -127,7 +147,7 @@ def main() -> int:
     database = DatabaseService(workspace.get_db_path(selected_workspace["id"]))
     database.init_database()
     seed_workspace_settings(database, selected_workspace, workspace.get_profile())
-    services = build_services(database, workspace, selected_workspace["id"])
+    services = build_services(database, workspace, selected_workspace["id"], license_profile=license_profile)
     services["license"] = license_profile
     try:
         update_info = FirebaseUpdateChecker().check()

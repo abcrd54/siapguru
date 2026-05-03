@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import webbrowser
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -15,6 +17,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
@@ -449,6 +452,39 @@ def error(parent, text: str) -> None:
 
 def confirm(parent, text: str) -> bool:
     return QMessageBox.question(parent, "SiapGuru", text) == QMessageBox.Yes
+
+
+class ProgressDialog(QProgressDialog):
+    def __init__(self, text: str, parent=None) -> None:
+        super().__init__(text, None, 0, 100, parent)
+        self.setWindowTitle("SiapGuru")
+        self.setWindowModality(Qt.ApplicationModal)
+        self.setCancelButton(None)
+        self.setMinimumDuration(0)
+        self.setAutoClose(False)
+        self.setAutoReset(False)
+        self.setValue(0)
+
+    def set_progress(self, text: str, current: int | None = None, total: int | None = None) -> None:
+        self.setLabelText(text)
+        if current is None or total is None or total <= 0:
+            self.setRange(0, 0)
+        else:
+            self.setRange(0, total)
+            self.setValue(max(0, min(current, total)))
+        QApplication.processEvents()
+
+
+@contextmanager
+def busy(parent, text: str):
+    dialog = ProgressDialog(text, parent)
+    dialog.set_progress(text)
+    dialog.show()
+    try:
+        yield dialog
+    finally:
+        dialog.close()
+        QApplication.processEvents()
 
 
 class UpdateDialog(QDialog):

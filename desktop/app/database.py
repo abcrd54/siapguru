@@ -180,6 +180,42 @@ SCHEMA = [
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS learning_modules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        class_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        description TEXT,
+        pdf_file_name TEXT NOT NULL,
+        pdf_path TEXT NOT NULL,
+        extracted_text TEXT DEFAULT '',
+        page_count INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (class_id) REFERENCES classes(id),
+        FOREIGN KEY (subject_id) REFERENCES subjects(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS question_generation_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        module_id INTEGER,
+        class_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        question_type TEXT NOT NULL,
+        question_count INTEGER NOT NULL,
+        choice_count INTEGER DEFAULT 0,
+        prompt_text TEXT NOT NULL,
+        generated_output TEXT DEFAULT '',
+        status TEXT DEFAULT 'draft',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (module_id) REFERENCES learning_modules(id) ON DELETE SET NULL,
+        FOREIGN KEY (class_id) REFERENCES classes(id),
+        FOREIGN KEY (subject_id) REFERENCES subjects(id)
+    )
+    """,
 ]
 
 
@@ -210,6 +246,8 @@ class DatabaseService:
         self.ensure_settings_columns()
         self.ensure_subjects_columns()
         self.ensure_remedial_columns()
+        self.ensure_learning_module_columns()
+        self.ensure_question_request_columns()
         exists = self.fetch_one("SELECT id FROM settings LIMIT 1")
         if not exists:
             columns = ", ".join(DEFAULT_SETTINGS.keys())
@@ -231,6 +269,8 @@ class DatabaseService:
             "teacher_name": "TEXT",
             "academic_year": "TEXT",
             "semester": "TEXT",
+            "admin_api_base_url": "TEXT DEFAULT ''",
+            "admin_api_token": "TEXT DEFAULT ''",
             "kkm": "INTEGER DEFAULT 75",
             "weight_task": "INTEGER DEFAULT 30",
             "weight_mid": "INTEGER DEFAULT 30",
@@ -278,6 +318,39 @@ class DatabaseService:
         for name, definition in required_columns.items():
             if name not in existing:
                 self.get_connection().execute(f"ALTER TABLE remedial_records ADD COLUMN {name} {definition}")
+        self.get_connection().commit()
+
+    def ensure_learning_module_columns(self) -> None:
+        rows = self.fetch_all("PRAGMA table_info(learning_modules)")
+        existing = {row["name"] for row in rows}
+        required_columns = {
+            "cloudinary_public_id": "TEXT",
+            "cloudinary_url": "TEXT",
+            "cloudinary_resource_type": "TEXT",
+            "upload_status": "TEXT DEFAULT 'local_only'",
+            "upload_error": "TEXT",
+        }
+        for name, definition in required_columns.items():
+            if name not in existing:
+                self.get_connection().execute(f"ALTER TABLE learning_modules ADD COLUMN {name} {definition}")
+        self.get_connection().commit()
+
+    def ensure_question_request_columns(self) -> None:
+        rows = self.fetch_all("PRAGMA table_info(question_generation_requests)")
+        existing = {row["name"] for row in rows}
+        required_columns = {
+            "provider": "TEXT DEFAULT 'openrouter'",
+            "model_name": "TEXT DEFAULT ''",
+            "response_text": "TEXT DEFAULT ''",
+            "generation_status": "TEXT DEFAULT 'draft'",
+            "error_message": "TEXT DEFAULT ''",
+            "remote_result_id": "TEXT DEFAULT ''",
+            "remote_sync_status": "TEXT DEFAULT 'local_only'",
+            "remote_sync_error": "TEXT DEFAULT ''",
+        }
+        for name, definition in required_columns.items():
+            if name not in existing:
+                self.get_connection().execute(f"ALTER TABLE question_generation_requests ADD COLUMN {name} {definition}")
         self.get_connection().commit()
 
     def run_query(self, query: str, params: Iterable[Any] | None = None) -> sqlite3.Cursor:
