@@ -20,9 +20,14 @@ if (-not (Test-Path $NotesPath)) {
 }
 
 $tagExists = $false
-gh release view $Tag *> $null
-if ($LASTEXITCODE -eq 0) {
-    $tagExists = $true
+try {
+    gh release view $Tag 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $tagExists = $true
+    }
+}
+catch {
+    $tagExists = $false
 }
 
 if (-not $tagExists) {
